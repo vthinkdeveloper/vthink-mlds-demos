@@ -38,76 +38,70 @@
 <body>
   <div id="root"></div>
 
-  <script type="text/babel" data-v="4">
+  <script type="text/babel" data-v="5">
     const { useState, useRef, useEffect, useCallback } = React;
 
     /* ── Memory bucket metadata ── */
     const BUCKETS = [
       { key: 'stm',        label: 'STM',           subtitle: 'Current Session',   color: '#FFBE0B' },
-      { key: 'episodic',   label: 'Episodic LTM',  subtitle: 'What Happened',     color: '#3B82F6' },
-      { key: 'semantic',   label: 'Semantic LTM',  subtitle: 'Facts Learned',     color: '#10B981' },
-      { key: 'procedural', label: 'Procedural LTM',subtitle: 'Patterns Observed', color: '#8B5CF6' },
+      { key: 'episodic',   label: 'Episodic LTM',  subtitle: 'Key Past Events',     color: '#3B82F6' },
+      { key: 'semantic',   label: 'Semantic LTM',  subtitle: 'Facts & Patterns',    color: '#10B981' },
+      { key: 'procedural', label: 'Procedural LTM',subtitle: 'Learned Skills',      color: '#8B5CF6' },
     ];
 
     const EMPTY_MEM = { stm: [], episodic: [], semantic: [], procedural: [] };
 
-    /* ── Pre-seeded long-term memory (persists across sessions) ── */
-    const SEEDED_LTM = {
-      episodic: [
-        'Ran a sprint retrospective with the engineering team last week',
-        'Team surfaced three blockers: slow CI pipeline, unclear product requirements, and too many context-switching meetings',
-        'Each blocker was assigned a named owner with a hard deadline before the retro closed',
-      ],
-      semantic: [
-        'Name: Adharsh',
-        'Strongly prefers concise, bullet-pointed answers: never long paragraphs',
-        'Values accountability: every meeting must end with written action items, named owners, and deadlines',
-      ],
-      procedural: [
-        'Retro format: always Start / Stop / Continue, team votes on top 3 items only',
-        'Each action item must have one named owner and one hard deadline before the retro ends',
-        'Retro closes with a written summary emailed to the full team the same day',
-      ],
-    };
-
     /* All API calls go through the local proxy: key never touches the browser */
-    const API_ENDPOINT = '/api/messages';
+    const API_ENDPOINT = '/api/chat';
 
-    /* ── MemoryBucket ── */
-    function MemoryBucket({ label, subtitle, color, items, flashKey, expanded, onExpand, onCollapse }) {
-      const fontSize = expanded ? '1rem' : '0.8rem';
-      const gap      = expanded ? 12 : 5;
+    /* ── Pre-built prompts for live demo ── */
+    const DEMO_PROMPTS = [
+      { label: '1. Intro',      text: "Hey, I'm Adharsh — I'm a lead software engineer at vThink. Quick heads up on how I like to work: keep things short and to the point." },
+      { label: '2. Retro Event',text: "Last week I ran a sprint retrospective with my engineering team. We surfaced three blockers: slow CI pipeline, unclear product requirements, and too many context-switching meetings." },
+      { label: '3. Retro Rules',text: "I always run retros the same way: Start / Stop / Continue format, team votes on the top 3 items, each item gets a named owner and a hard deadline. I never leave a retro without written action items." },
+      { label: '4. Email',      text: "Based on what we discussed, draft a short follow-up email I can send to my team today." },
+      { label: '5. Recall',     text: "What do you know about me and how I run my team?" },
+    ];
 
+    /* ── MemoryBucket (accordion) ── */
+    function MemoryBucket({ label, subtitle, color, items, flashKey, open, onToggle, grouped }) {
       return (
         <div
-          onClick={expanded ? undefined : onExpand}
           style={{
             background: '#162032',
             borderRadius: 10,
             overflow: 'hidden',
-            flex: expanded ? 1 : 1,
-            display: 'flex',
-            flexDirection: 'column',
-            minHeight: 0,
-            border: `1px solid ${expanded ? color + '88' : '#1a2e47'}`,
-            cursor: expanded ? 'default' : 'pointer',
+            border: `1px solid ${open ? color + '88' : '#1a2e47'}`,
             transition: 'border-color 0.2s',
+            flexShrink: 0,
           }}
         >
-          {/* Header */}
-          <div style={{
-            padding: expanded ? '10px 16px' : '7px 12px',
-            background: color + '18',
-            borderLeft: `3px solid ${color}`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            flexShrink: 0,
-          }}>
-            <span style={{ fontWeight: 700, fontSize: expanded ? '0.95rem' : '0.78rem', color, letterSpacing: '0.04em' }}>
+          {/* Header (click to toggle) */}
+          <div
+            onClick={onToggle}
+            style={{
+              padding: '8px 12px',
+              background: color + '18',
+              borderLeft: `3px solid ${color}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+          >
+            <span style={{
+              fontSize: '0.7rem',
+              color,
+              width: 10,
+              display: 'inline-block',
+              transition: 'transform 0.2s',
+              transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+            }}>▶</span>
+            <span style={{ fontWeight: 700, fontSize: '0.8rem', color, letterSpacing: '0.04em' }}>
               {label}
             </span>
-            <span style={{ fontSize: expanded ? '0.8rem' : '0.7rem', color: color + 'aa' }}>{subtitle}</span>
+            <span style={{ fontSize: '0.7rem', color: color + 'aa' }}>{subtitle}</span>
             <span style={{
               marginLeft: 'auto',
               fontSize: '0.68rem',
@@ -119,49 +113,56 @@
             }}>
               {items.length}
             </span>
-            {expanded && (
-              <button
-                onClick={onCollapse}
-                style={{
-                  marginLeft: 8,
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#64748b',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  lineHeight: 1,
-                  padding: '0 2px',
-                }}
-              >
-                ✕
-              </button>
-            )}
           </div>
 
-          {/* Content */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: expanded ? '16px 20px' : '10px 12px' }}>
-            <div key={flashKey} className={flashKey > 0 ? 'bucket-flash' : ''}>
-              {items.length === 0 ? (
-                <p style={{ color: '#334155', fontSize: '0.78rem', fontStyle: 'italic' }}>
-                  No entries yet…
-                </p>
-              ) : (
-                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap }}>
-                  {items.map((item, i) => (
-                    <li key={i} style={{
-                      fontSize,
-                      color: '#cbd5e1',
-                      lineHeight: 1.65,
-                      paddingLeft: expanded ? 14 : 10,
-                      borderLeft: `2px solid ${color}55`,
-                    }}>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              )}
+          {/* Content (only when open) */}
+          {open && (
+            <div style={{ maxHeight: 260, overflowY: 'auto', padding: '10px 12px' }}>
+              <div key={flashKey} className={flashKey > 0 ? 'bucket-flash' : ''}>
+                {items.length === 0 ? (
+                  <p style={{ color: '#334155', fontSize: '0.78rem', fontStyle: 'italic' }}>
+                    No entries yet…
+                  </p>
+                ) : (
+                  <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {(() => {
+                      /* Group procedural items by key (e.g. "Retro: ...") */
+                      const hasKeys = grouped && items.every(x => x.includes(': '));
+                      if (!hasKeys) {
+                        return items.map((item, i) => (
+                          <li key={i} style={{
+                            fontSize: '0.8rem', color: '#cbd5e1', lineHeight: 1.65,
+                            paddingLeft: 10, borderLeft: `2px solid ${color}55`,
+                          }}>{item}</li>
+                        ));
+                      }
+                      const groups = {};
+                      items.forEach(item => {
+                        const idx = item.indexOf(': ');
+                        const key = item.slice(0, idx);
+                        const val = item.slice(idx + 2);
+                        if (!groups[key]) groups[key] = [];
+                        groups[key].push(val);
+                      });
+                      return Object.entries(groups).map(([key, vals]) => (
+                        <li key={key} style={{
+                          fontSize: '0.8rem', color: '#cbd5e1', lineHeight: 1.65,
+                          paddingLeft: 10, borderLeft: `2px solid ${color}55`,
+                        }}>
+                          <span style={{ color, fontWeight: 600 }}>{key}:</span>
+                          <ul style={{ listStyle: 'none', paddingLeft: 10, marginTop: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            {vals.map((v, j) => (
+                              <li key={j} style={{ fontSize: '0.78rem', color: '#94a3b8' }}>• {v}</li>
+                            ))}
+                          </ul>
+                        </li>
+                      ));
+                    })()}
+                  </ul>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       );
     }
@@ -188,15 +189,56 @@
       );
     }
 
+    /* ── Memory toggle pill ── */
+    function MemToggle({ label, enabled, onToggle, color }) {
+      return (
+        <button
+          onClick={onToggle}
+          title={enabled ? `${label} enabled — click to disable` : `${label} disabled — click to enable`}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: enabled ? color + '18' : 'transparent',
+            border: `1px solid ${enabled ? color + '66' : '#1a2e47'}`,
+            borderRadius: 6,
+            color: enabled ? color : '#475569',
+            padding: '4px 9px',
+            cursor: 'pointer',
+            fontSize: '0.7rem',
+            fontFamily: 'inherit',
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+            transition: 'all 0.15s',
+          }}
+        >
+          <span style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: enabled ? color : '#334155',
+          }} />
+          {label}
+          <span style={{ fontSize: '0.62rem', opacity: 0.7 }}>
+            {enabled ? 'ON' : 'OFF'}
+          </span>
+        </button>
+      );
+    }
+
     /* ── Main App ── */
     function App() {
       const [messages, setMessages] = useState([]);
       const [input, setInput]       = useState('');
       const [loading, setLoading]   = useState(false);
-      const [memory, setMemory]     = useState({ stm: [], ...SEEDED_LTM });
+      const [memory, setMemory]     = useState({ ...EMPTY_MEM });
       const [flashKeys, setFlashKeys] = useState({ stm: 0, episodic: 0, semantic: 0, procedural: 0 });
-      const [expandedBucket, setExpandedBucket] = useState(null);
-      const memoryRef = useRef({ stm: [], ...SEEDED_LTM });
+      const [openBuckets, setOpenBuckets] = useState({});
+      const toggleBucket = (key) => setOpenBuckets(prev => ({ ...prev, [key]: !prev[key] }));
+      const [stmEnabled, setStmEnabled] = useState(false);
+      const [ltmEnabled, setLtmEnabled] = useState(false);
+      const memoryRef = useRef({ ...EMPTY_MEM });
+      const stmRef = useRef(false);
+      const ltmRef = useRef(false);
+
+      useEffect(() => { stmRef.current = stmEnabled; }, [stmEnabled]);
+      useEffect(() => { ltmRef.current = ltmEnabled; }, [ltmEnabled]);
 
       /* keep ref in sync so sendMessage always reads latest LTM */
       useEffect(() => { memoryRef.current = memory; }, [memory]);
@@ -219,40 +261,69 @@
         return data;
       }, []);
 
+      /* ── Debug log: POST to /api/log endpoint ── */
+      const debugLog = useCallback(async (tag, data) => {
+        try {
+          await fetch('/api/log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tag, data, ts: new Date().toISOString() }),
+          });
+        } catch (_) {}
+      }, []);
+
       /* ── Memory extraction (haiku, fast) ── */
       const extractMemory = useCallback(async (msgs) => {
+        debugLog('EXTRACT_START', { msgCount: msgs.length });
         try {
+          const existing = memoryRef.current;
+          const existingJson = JSON.stringify({ episodic: existing.episodic, semantic: existing.semantic, procedural: existing.procedural });
+
           const data = await callAPI({
             model: 'claude-haiku-4-5-20251001',
             max_tokens: 1024,
-            system: 'Extract memory from this conversation. Return ONLY valid JSON: no markdown, no explanation, no extra text: with exactly these keys: stm (array of plain strings), episodic (array of plain strings), semantic (array of plain strings), procedural (array of plain strings). Every value must be a plain string, not an object.',
+            system: `You manage a memory system. Given existing memory and a new exchange, return the UPDATED FULL memory state as valid JSON only (no markdown, no explanation).
+
+EXISTING MEMORY:
+${existingJson}
+
+RULES:
+- Merge new information into the existing memory. Do NOT duplicate — if a fact already exists, keep it as-is. If new info refines or contradicts an existing entry, REPLACE the old entry.
+- Keep each bucket tight: max 5 entries per bucket. Consolidate related facts into one entry.
+
+BUCKETS:
+stm: What the user just said/asked in this exchange only. 1-3 short strings.
+
+episodic: Specific events the user described (things that happened, with time context). One entry per distinct event. Examples: "Ran a sprint retrospective with the engineering team last week"
+
+semantic: Distinct facts about the user — identity, role, preferences. Each entry is ONE unique fact. NO overlapping entries. Examples: "Name: Adharsh", "Role: lead software engineer at vThink", "Prefers concise bullet-pointed answers"
+
+procedural: Repeatable workflows or skills. Each entry MUST start with a category label + colon, then the step. Examples: "Retro: use Start / Stop / Continue format", "Email: send written summary same day", "Communication: use bullet points, not paragraphs"
+
+Return ONLY the JSON object with keys: stm, episodic, semantic, procedural. Every value is an array of plain strings.`,
             messages: msgs,
           });
+          debugLog('EXTRACT_API_RESP', { content: data.content?.[0]?.text?.slice(0, 500) });
           const raw       = data.content?.[0]?.text ?? '{}';
           const jsonMatch = raw.match(/\{[\s\S]*\}/);
+          debugLog('EXTRACT_JSON_MATCH', { matched: !!jsonMatch, raw: raw.slice(0, 300) });
           const parsed    = JSON.parse(jsonMatch ? jsonMatch[0] : '{}');
+          debugLog('EXTRACT_PARSED', parsed);
           /* Normalise: stringify any items that came back as objects */
           const toStrings = arr => (Array.isArray(arr) ? arr : [])
             .map(x => typeof x === 'string' ? x : JSON.stringify(x));
-          /* Merge new extractions on top of existing memory (LTM accumulates) */
-          const merge = (existing, incoming) => {
-            const deduped = [...existing];
-            for (const item of incoming) {
-              if (!deduped.includes(item)) deduped.push(item);
-            }
-            return deduped;
-          };
           setMemory(prev => {
             const newMem = {
               stm:        toStrings(parsed.stm),
-              episodic:   merge(prev.episodic,   toStrings(parsed.episodic)),
-              semantic:   merge(prev.semantic,   toStrings(parsed.semantic)),
-              procedural: merge(prev.procedural, toStrings(parsed.procedural)),
+              episodic:   parsed.episodic?.length   ? toStrings(parsed.episodic)   : prev.episodic,
+              semantic:   parsed.semantic?.length    ? toStrings(parsed.semantic)   : prev.semantic,
+              procedural: parsed.procedural?.length  ? toStrings(parsed.procedural) : prev.procedural,
             };
             const changed = {};
             for (const k of ['stm', 'episodic', 'semantic', 'procedural']) {
               if (JSON.stringify(newMem[k]) !== JSON.stringify(prev[k])) changed[k] = true;
             }
+            debugLog('EXTRACT_RESULT', { newMem, changed });
             if (Object.keys(changed).length > 0) {
               setFlashKeys(fk => {
                 const next = { ...fk };
@@ -263,25 +334,28 @@
             return newMem;
           });
         } catch (err) {
-          console.error('[Memory extraction]', err);
+          debugLog('EXTRACT_ERROR', { message: err.message, stack: err.stack });
         }
       }, [callAPI]);
 
       /* ── Build system prompt from current LTM ── */
-      const buildSystemPrompt = (mem) => {
+      const buildSystemPrompt = (mem, ltmOn) => {
+        if (!ltmOn) {
+          return `You are a helpful assistant meeting the user for the first time in this conversation. If the user asks who they are, what you know about them, or anything about their role, work, preferences, or history, and they have not already told you in this conversation, simply say you don't know — naturally, like a person would. Do NOT use words like "memory", "remember", "recall", "stateless", "session", "context", or reference how you work internally. Do not apologise or offer explanations about your limitations. Just answer naturally. Be concise.`;
+        }
         const fmt = (arr) => arr.length ? arr.map(x => `• ${x}`).join('\n') : '  (none yet)';
-        return `You are a helpful assistant with access to long-term memory about the user.
+        return `You are a helpful assistant who knows the following about the user. Treat these as things you simply know — do not mention memory, recall, or where this information came from.
 
-EPISODIC MEMORY: past events:
+What happened recently:
 ${fmt(mem.episodic)}
 
-SEMANTIC MEMORY: facts about the user:
+Facts about the user:
 ${fmt(mem.semantic)}
 
-PROCEDURAL MEMORY: how the user works:
+How the user works:
 ${fmt(mem.procedural)}
 
-Use this memory to personalise every response. When asked what you know about the user or their working style, draw directly from this memory. Be concise and use bullet points.`;
+Use this to personalise every response. When asked about the user or their working style, answer directly from what you know — never say "based on what I remember" or reference storage/memory. Be concise and use bullet points.`;
       };
 
       /* ── Send chat message ── */
@@ -296,16 +370,17 @@ Use this memory to personalise every response. When asked what you know about th
         setLoading(true);
 
         try {
+          const apiMessages = stmRef.current ? outgoing : [userMsg];
           const data = await callAPI({
             model: 'claude-haiku-4-5-20251001',
             max_tokens: 1024,
-            system: buildSystemPrompt(memoryRef.current),
-            messages: outgoing,
+            system: buildSystemPrompt(memoryRef.current, ltmRef.current),
+            messages: apiMessages,
           });
           const assistantText = data.content?.[0]?.text ?? '(empty response)';
           const full = [...outgoing, { role: 'assistant', content: assistantText }];
           setMessages(full);
-          extractMemory(full);
+          extractMemory(full.slice(-2));
         } catch (err) {
           setMessages(prev => [...prev, { role: 'assistant', content: `⚠ Error: ${err.message}` }]);
         } finally {
@@ -349,42 +424,54 @@ Use this memory to personalise every response. When asked what you know about th
               background: '#0f1e2e',
               flexShrink: 0,
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: '1rem' }}>🧠</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{
+                  fontSize: '0.62rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.15em',
+                  color: '#00C9A7',
+                  background: 'rgba(0,201,167,0.12)',
+                  padding: '3px 8px',
+                  borderRadius: 4,
+                  textTransform: 'uppercase',
+                }}>Demo 01</span>
                 <span style={{
                   fontWeight: 700,
-                  fontSize: '0.85rem',
+                  fontSize: '0.9rem',
                   color: '#e2e8f0',
                   letterSpacing: '0.02em',
                 }}>
                   Memory Inspector
                 </span>
                 <span style={{
-                  fontSize: '0.68rem',
-                  color: '#334155',
-                  fontStyle: 'italic',
+                  fontSize: '0.7rem',
+                  color: '#475569',
                 }}>
-                 : Cognitive Architectures Demo
+                  Cognitive Architectures · MLDS 2026
                 </span>
               </div>
-              <button
-                className="new-session-btn"
-                onClick={newSession}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid #1a2e47',
-                  borderRadius: 6,
-                  color: '#64748b',
-                  padding: '5px 12px',
-                  cursor: 'pointer',
-                  fontSize: '0.75rem',
-                  fontFamily: 'inherit',
-                  fontWeight: 600,
-                  transition: 'border-color 0.15s, color 0.15s',
-                }}
-              >
-                New Session
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <MemToggle label="STM" enabled={stmEnabled} onToggle={() => setStmEnabled(v => !v)} color="#FFBE0B" />
+                <MemToggle label="LTM" enabled={ltmEnabled} onToggle={() => setLtmEnabled(v => !v)} color="#10B981" />
+                <button
+                  className="new-session-btn"
+                  onClick={newSession}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid #1a2e47',
+                    borderRadius: 6,
+                    color: '#64748b',
+                    padding: '5px 12px',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    fontFamily: 'inherit',
+                    fontWeight: 600,
+                    transition: 'border-color 0.15s, color 0.15s',
+                  }}
+                >
+                  New Session
+                </button>
+              </div>
             </div>
 
             {/* Messages */}
@@ -404,10 +491,16 @@ Use this memory to personalise every response. When asked what you know about th
                   fontSize: '0.85rem',
                   lineHeight: 1.8,
                   userSelect: 'none',
+                  maxWidth: 320,
                 }}>
-                  <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🧠</div>
-                  Start chatting: watch the memory buckets<br />
-                  populate and flash in real time.
+                  <div style={{
+                    fontSize: '0.7rem',
+                    letterSpacing: '0.2em',
+                    color: '#00C9A7',
+                    fontWeight: 700,
+                    marginBottom: 10,
+                  }}>MEMORY INSPECTOR</div>
+                  Start chatting — watch the memory buckets populate and flash in real time.
                 </div>
               )}
               {messages.map((msg, i) => (
@@ -428,6 +521,43 @@ Use this memory to personalise every response. When asked what you know about th
                 </div>
               )}
               <div ref={chatEndRef} />
+            </div>
+
+            {/* Prompt chips — quick-fire demo prompts */}
+            <div style={{
+              padding: '8px 14px',
+              borderTop: '1px solid #1a2e47',
+              display: 'flex',
+              gap: 6,
+              overflowX: 'auto',
+              background: '#0b1624',
+              flexShrink: 0,
+            }}>
+              {DEMO_PROMPTS.map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => setInput(p.text)}
+                  title={p.text}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid #1a2e47',
+                    borderRadius: 14,
+                    color: '#94a3b8',
+                    padding: '4px 10px',
+                    cursor: 'pointer',
+                    fontSize: '0.72rem',
+                    fontFamily: 'inherit',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    transition: 'border-color 0.15s, color 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#00C9A7'; e.currentTarget.style.color = '#00C9A7'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a2e47'; e.currentTarget.style.color = '#94a3b8'; }}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
 
             {/* Input */}
@@ -483,6 +613,7 @@ Use this memory to personalise every response. When asked what you know about th
           </div>
 
           {/* ════════════════ RIGHT: Memory Inspector ════════════════ */}
+          {(stmEnabled || ltmEnabled) && (
           <div style={{
             flex: 1,
             display: 'flex',
@@ -490,7 +621,7 @@ Use this memory to personalise every response. When asked what you know about th
             padding: '12px 14px 14px',
             gap: 10,
             minWidth: 0,
-            overflow: 'hidden',
+            overflowY: 'auto',
           }}>
 
             {/* Panel header */}
@@ -512,38 +643,31 @@ Use this memory to personalise every response. When asked what you know about th
                 Memory Buckets
               </span>
               <span style={{ fontSize: '0.68rem', color: '#334155' }}>
-                STM resets on New Session · LTM persists
+                {!stmEnabled ? 'STM disabled · LTM persists'
+                  : !ltmEnabled ? 'LTM disabled · STM only'
+                  : 'STM resets on New Session · LTM persists'}
               </span>
             </div>
 
-            {/* Buckets: click to expand, X to collapse */}
-            {expandedBucket
-              ? BUCKETS.filter(b => b.key === expandedBucket).map(({ key, label, subtitle, color }) => (
-                  <MemoryBucket
-                    key={key}
-                    label={label}
-                    subtitle={subtitle}
-                    color={color}
-                    items={memory[key]}
-                    flashKey={flashKeys[key]}
-                    expanded={true}
-                    onCollapse={() => setExpandedBucket(null)}
-                  />
-                ))
-              : BUCKETS.map(({ key, label, subtitle, color }) => (
-                  <MemoryBucket
-                    key={key}
-                    label={label}
-                    subtitle={subtitle}
-                    color={color}
-                    items={memory[key]}
-                    flashKey={flashKeys[key]}
-                    expanded={false}
-                    onExpand={() => setExpandedBucket(key)}
-                  />
-                ))
+            {/* Buckets: filtered by toggle state; click header to expand/collapse */}
+            {BUCKETS
+              .filter(b => b.key === 'stm' ? stmEnabled : ltmEnabled)
+              .map(({ key, label, subtitle, color }) => (
+                <MemoryBucket
+                  key={key}
+                  label={label}
+                  subtitle={subtitle}
+                  color={color}
+                  items={memory[key]}
+                  flashKey={flashKeys[key]}
+                  open={!!openBuckets[key]}
+                  onToggle={() => toggleBucket(key)}
+                  grouped={key === 'procedural'}
+                />
+              ))
             }
           </div>
+          )}
 
         </div>
       );

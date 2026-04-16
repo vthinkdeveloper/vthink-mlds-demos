@@ -92,7 +92,8 @@
     .msg.user { align-self: flex-end; }
     .msg.agent { align-self: flex-start; }
     .msg-bubble {
-      padding: 0.65rem 1rem; border-radius: 10px; font-size: 0.85rem; line-height: 1.5;
+      padding: 0.65rem 1rem; border-radius: 10px; font-size: 0.85rem; line-height: 1.65;
+      white-space: pre-wrap;
     }
     .msg.user .msg-bubble { background: rgba(0,201,167,0.15); border: 1px solid rgba(0,201,167,0.25); }
     .msg.agent .msg-bubble { background: var(--surface); border: 1px solid var(--border); }
@@ -105,6 +106,8 @@
     }
     .outcome-badge.success { background: rgba(0,201,167,0.15); color: var(--teal); border: 1px solid rgba(0,201,167,0.3); }
     .outcome-badge.blocked { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,92,92,0.3); }
+    .outcome-badge.over-executed { background: rgba(255,92,92,0.15); color: var(--red); border: 1px solid rgba(255,92,92,0.3); }
+    .outcome-badge.scoped { background: rgba(0,201,167,0.15); color: var(--teal); border: 1px solid rgba(0,201,167,0.3); }
 
     /* Persona chip */
     .persona-chip {
@@ -192,6 +195,7 @@
     .rbac-label { color: var(--muted); }
     .rbac-value { font-weight: 600; }
     .rbac-verdict { margin-top: 0.75rem; text-align: center; font-size: 0.8rem; font-weight: 700; padding: 0.5rem; border-radius: 6px; background: rgba(0,201,167,0.12); border: 1px solid rgba(0,201,167,0.3); color: var(--teal); }
+    .rbac-warning { margin-top: 0.5rem; text-align: center; font-size: 0.75rem; font-weight: 600; padding: 0.45rem 0.6rem; border-radius: 6px; background: rgba(255,92,92,0.1); border: 1px solid rgba(255,92,92,0.3); color: var(--red); }
 
     /* Spinner */
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -214,54 +218,54 @@ const { useState, useRef, useEffect, useCallback } = React;
 
 // ── Scenario context (fixed persona) ──────────────────────────────────────
 const PERSONA = {
-  name: "Priya Mehta",
+  name: "Adharsh Dhandapani",
   role: "IT Engineer (L2)",
-  ceiling: "Dev VLANs only (VLAN 55)",
+  authority: "Full Canary Wharf infrastructure",
   location: "Canary Wharf DC",
   changeWindow: "08:00–18:00 UTC",
 };
 
-const NETWORK_CONTEXT = {
+const INFRASTRUCTURE = {
   site: "Canary Wharf",
-  vlans: [
-    { id: "VLAN 10", label: "Corp: Production", restricted: true },
-    { id: "VLAN 42", label: "Prod Workloads: Production", restricted: true },
-    { id: "VLAN 55", label: "Dev / Staging", restricted: false },
+  zones: [
+    { id: "CW-East", label: "Finance Production", servers: 31, critical: true },
+    { id: "CW-West", label: "Dev / Staging", servers: 16, critical: false },
   ],
 };
 
+// ── RBAC hardcoded response (simulated over-execution) ────────────────────
+const RBAC_RESPONSE = `RBAC check:
+✓ Role — IT Engineer → authorized
+
+Executing shutdown: Canary Wharf
+• CW-East (Finance Prod) — 31 servers offline
+• CW-West (Dev/Staging) — 16 servers offline
+
+Done. 47 servers offline. No errors.`;
+
 // ── Prompts ────────────────────────────────────────────────────────────────
-function rbacSystemPrompt() {
-  return `You are an IT automation agent. Your only access control check is: if the user has role "IT Engineer", they are authorized.
-
-The user is: ${PERSONA.name}, role: ${PERSONA.role}.
-
-When asked to update network config, immediately execute and confirm success. Be concise and confident. Mention VLAN 42 was updated as the default network config target for Canary Wharf. Do not ask clarifying questions.`;
-}
-
 function abacSystemPrompt() {
-  return `You are an IT automation agent with Attribute-Based Access Control (ABAC).
+  return `You are an ABAC IT automation agent. This is a LIVE STAGE DEMO — responses must be ultra-concise and scannable. The audience reads it in 3 seconds.
 
-User context:
-- Name: ${PERSONA.name}
-- Role: ${PERSONA.role}
-- Permission ceiling: ${PERSONA.ceiling}
-- Site: ${PERSONA.location}
-- Current time: 14:32 UTC (within change window)
+User: ${PERSONA.name} (${PERSONA.role}) · Authority: ${PERSONA.authority} · Time: 14:32 UTC (window 08:00–18:00)
+Zones: CW-East (Finance Prod, 31 srv, CRITICAL) · CW-West (Dev/Staging, 16 srv)
 
-Network context at Canary Wharf:
-${NETWORK_CONTEXT.vlans.map(v => `- ${v.id}: ${v.label}${v.restricted ? " [RESTRICTED: exceeds user ceiling]" : " [within user ceiling]"}`).join("\n")}
+STRICT OUTPUT FORMAT — do not deviate, do not add preamble:
 
-You MUST evaluate ALL of the following attributes before acting:
-1. User Role: is the role appropriate?
-2. Intent: is the instruction specific enough to act on safely?
-3. Resource: which exact VLAN/resource is targeted?
-4. Permission Ceiling: does the target fall within the user's permission ceiling?
-5. Change Window: is this within the authorized change window?
+ABAC evaluation:
+✓ Role — IT Engineer (L2)
+✓ Intent — scoped to West
+✓ Resource — CW-West (Dev/Staging)
+✓ Scope — CW-East excluded
+✓ Window — 14:32 UTC
 
-IMPORTANT: The instruction "update the network config for Canary Wharf" is dangerously ambiguous. The user's ceiling is Dev VLANs only, but the default target would be VLAN 42 (Prod). You must BLOCK and ask for clarification. Do NOT execute.
+Executing: CW-West only → 16 servers offline
+Untouched: CW-East (Finance Prod, 31 srv)
 
-Respond as the agent: explain what you evaluated, what you found, and why you are blocking. Ask for the specific VLAN and a change ticket number. Be clear and direct.`;
+Rules:
+- Max 8 lines total. No headings, no code blocks, no emojis beyond ✓.
+- No explanations, no preamble like "I'll evaluate". Go straight to the bullets.
+- Each check line: 5 words max after the ✓.`;
 }
 
 function abacExtractionPrompt(agentResponse) {
@@ -275,14 +279,14 @@ ${agentResponse}
 Return this exact structure (no markdown, no explanation):
 {
   "attributes": [
-    {"name": "User Role", "value": "IT Engineer (L2)", "status": "pass", "note": "Role is valid"},
-    {"name": "Intent", "value": "...", "status": "warn", "note": "..."},
-    {"name": "Resource", "value": "...", "status": "warn", "note": "..."},
-    {"name": "Permission Ceiling", "value": "...", "status": "fail", "note": "..."},
-    {"name": "Change Window", "value": "14:32 UTC", "status": "pass", "note": "Within window"}
+    {"name": "User Role", "value": "IT Engineer (L2)", "status": "pass", "note": "Authorized for Canary Wharf infrastructure"},
+    {"name": "Intent", "value": "Shut down CW-West for maintenance", "status": "pass", "note": "Specific zone identified"},
+    {"name": "Resource", "value": "CW-West (Dev/Staging)", "status": "pass", "note": "Target zone confirmed"},
+    {"name": "Scope Boundary", "value": "CW-East excluded", "status": "pass", "note": "Finance Production unaffected"},
+    {"name": "Change Window", "value": "14:32 UTC", "status": "pass", "note": "Within authorized window"}
   ],
-  "verdict": "blocked",
-  "reason": "one sentence"
+  "verdict": "allowed",
+  "reason": "one sentence explaining scoped execution"
 }
 
 status must be one of: pass, warn, fail
@@ -322,7 +326,7 @@ function App() {
   const [apiKey] = useState(window.__APIKEY__ || "");
   const [mode, setMode] = useState("rbac"); // "rbac" | "abac"
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("Update the network config for Canary Wharf");
+  const [input, setInput] = useState("Shut down Canary Wharf West for scheduled maintenance");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -376,17 +380,11 @@ function App() {
       const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }));
 
       if (mode === "rbac") {
-        // Simple role check animation
-        await new Promise(r => setTimeout(r, 600));
+        // Simulate RBAC: role check only, then over-execute
+        await new Promise(r => setTimeout(r, 700));
         setRbacCheckVisible(true);
-
-        const reply = await callClaude(
-          apiKey,
-          "claude-sonnet-4-6",
-          rbacSystemPrompt(),
-          apiMessages
-        );
-        setMessages(prev => [...prev, { role: "assistant", content: reply, outcome: "success" }]);
+        await new Promise(r => setTimeout(r, 900));
+        setMessages(prev => [...prev, { role: "assistant", content: RBAC_RESPONSE, outcome: "over-executed" }]);
 
       } else {
         // ABAC: show skeleton attrs while waiting
@@ -394,7 +392,7 @@ function App() {
           { name: "User Role", value: "IT Engineer (L2)", status: "checking", active: false },
           { name: "Intent", value: "...", status: "checking", active: false },
           { name: "Resource", value: "...", status: "checking", active: false },
-          { name: "Permission Ceiling", value: "...", status: "checking", active: false },
+          { name: "Scope Boundary", value: "...", status: "checking", active: false },
           { name: "Change Window", value: "...", status: "checking", active: false },
         ]);
 
@@ -415,21 +413,20 @@ function App() {
             "You extract structured data from text. Return only valid JSON, no markdown.",
             [{ role: "user", content: abacExtractionPrompt(reply) }]
           );
-          // Clean up any markdown fences
-          const cleaned = extracted.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-          parsedAttrs = JSON.parse(cleaned);
+          const match = extracted.match(/\{[\s\S]*\}/);
+          parsedAttrs = JSON.parse(match ? match[0] : extracted);
         } catch (e) {
           // Fallback attrs
           parsedAttrs = {
             attributes: [
-              { name: "User Role", value: "IT Engineer (L2)", status: "pass", note: "Role recognized" },
-              { name: "Intent", value: "update network config", status: "warn", note: "Ambiguous: no VLAN specified" },
-              { name: "Resource", value: "Canary Wharf", status: "warn", note: "3 VLANs found: unclear target" },
-              { name: "Permission Ceiling", value: "Dev VLANs only", status: "fail", note: "Default target (VLAN 42) exceeds ceiling" },
+              { name: "User Role", value: "IT Engineer (L2)", status: "pass", note: "Authorized for Canary Wharf infrastructure" },
+              { name: "Intent", value: "Shut down CW-West for maintenance", status: "pass", note: "Specific zone identified" },
+              { name: "Resource", value: "CW-West (Dev/Staging)", status: "pass", note: "Target zone confirmed" },
+              { name: "Scope Boundary", value: "CW-East excluded", status: "pass", note: "Finance Production unaffected" },
               { name: "Change Window", value: "14:32 UTC", status: "pass", note: "Within authorized window" },
             ],
-            verdict: "blocked",
-            reason: "Ambiguous instruction targets a resource outside user's permission ceiling.",
+            verdict: "allowed",
+            reason: "Action scoped precisely to CW-West; CW-East (Finance Production) remains online.",
           };
         }
 
@@ -438,7 +435,8 @@ function App() {
         await new Promise(r => setTimeout(r, 300));
         setVerdictInfo({ verdict: parsedAttrs.verdict, reason: parsedAttrs.reason });
 
-        setMessages(prev => [...prev, { role: "assistant", content: reply, outcome: parsedAttrs.verdict }]);
+        const abacOutcome = parsedAttrs.verdict === "allowed" ? "scoped" : "blocked";
+        setMessages(prev => [...prev, { role: "assistant", content: reply, outcome: abacOutcome }]);
       }
     } catch (e) {
       setError(e.message);
@@ -460,7 +458,7 @@ function App() {
     setAttributes([]);
     setVerdictInfo(null);
     setError("");
-    setInput("Update the network config for Canary Wharf");
+    setInput("Shut down Canary Wharf West for scheduled maintenance");
   }
 
   const isAbac = mode === "abac";
@@ -518,7 +516,7 @@ function App() {
               <span style={{ color: "var(--border)", margin: "0 0.2rem" }}>·</span>
               <span>{PERSONA.role}</span>
               <span style={{ color: "var(--border)", margin: "0 0.2rem" }}>·</span>
-              <span style={{ color: "var(--yellow)", fontSize: "0.7rem" }}>Ceiling: {PERSONA.ceiling}</span>
+              <span style={{ color: "var(--yellow)", fontSize: "0.7rem" }}>Authority: {PERSONA.authority}</span>
             </div>
 
             {messages.length === 0 && (
@@ -531,8 +529,8 @@ function App() {
                 </div>
                 <div style={{ fontSize: "0.75rem", maxWidth: "280px", margin: "0 auto" }}>
                   {isAbac
-                    ? "Agent will evaluate intent, resource, and permission ceiling before acting."
-                    : "Agent checks role only: if role matches, it executes."}
+                    ? "Agent evaluates intent, resource, and scope boundary — executes only what was asked."
+                    : "Agent checks role only: if role matches, it executes. Scope is not evaluated."}
                 </div>
               </div>
             )}
@@ -546,8 +544,11 @@ function App() {
                   {msg.content}
                   {msg.outcome && (
                     <div>
-                      <span className={`outcome-badge ${msg.outcome === "success" || msg.outcome === "allowed" ? "success" : "blocked"}`}>
-                        {msg.outcome === "success" || msg.outcome === "allowed" ? "✓ EXECUTED" : "⊘ BLOCKED"}
+                      <span className={`outcome-badge ${msg.outcome === "scoped" ? "scoped" : msg.outcome === "over-executed" ? "over-executed" : msg.outcome === "success" ? "success" : "blocked"}`}>
+                        {msg.outcome === "scoped" ? "✓ SCOPED EXECUTION — CW-West only"
+                          : msg.outcome === "over-executed" ? "⚠ OVER-EXECUTED — Full site taken down"
+                          : msg.outcome === "success" ? "✓ EXECUTED"
+                          : "⊘ BLOCKED"}
                       </span>
                     </div>
                   )}
@@ -614,8 +615,8 @@ function App() {
                 <span>{PERSONA.role}</span>
               </div>
               <div className="context-row">
-                <span>Permission Ceiling</span>
-                <span style={{ color: "var(--yellow)", fontSize: "0.72rem" }}>{PERSONA.ceiling}</span>
+                <span>Authority</span>
+                <span style={{ color: "var(--yellow)", fontSize: "0.72rem" }}>{PERSONA.authority}</span>
               </div>
               <div className="context-row">
                 <span>Site</span>
@@ -627,14 +628,15 @@ function App() {
               </div>
             </div>
 
-            {/* Network context */}
+            {/* Infrastructure context */}
             <div className="context-card">
-              <h4>Network Resources: {NETWORK_CONTEXT.site}</h4>
-              {NETWORK_CONTEXT.vlans.map((v, i) => (
+              <h4>Infrastructure: {INFRASTRUCTURE.site}</h4>
+              {INFRASTRUCTURE.zones.map((z, i) => (
                 <div key={i} className="context-row">
-                  <span>{v.id}</span>
-                  <span style={{ color: v.restricted ? "var(--red)" : "var(--teal)", fontSize: "0.72rem" }}>
-                    {v.label}
+                  <span>{z.id}</span>
+                  <span style={{ fontSize: "0.72rem", textAlign: "right" }}>
+                    <span style={{ color: z.critical ? "var(--red)" : "var(--teal)" }}>{z.label}</span>
+                    <span style={{ color: "var(--muted)", marginLeft: "0.4rem" }}>({z.servers} srv)</span>
                   </span>
                 </div>
               ))}
@@ -645,7 +647,7 @@ function App() {
               <div className={`rbac-check ${rbacCheckVisible ? "show" : ""}`}>
                 <h4 style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.5rem" }}>RBAC Evaluation</h4>
                 <div className="rbac-check-row">
-                  <span className="rbac-label">Check</span>
+                  <span className="rbac-label">Check type</span>
                   <span className="rbac-value">Role only</span>
                 </div>
                 <div className="rbac-check-row">
@@ -653,18 +655,19 @@ function App() {
                   <span className="rbac-value" style={{ color: "var(--teal)" }}>IT Engineer ✓</span>
                 </div>
                 <div className="rbac-check-row">
-                  <span className="rbac-label">Intent checked?</span>
-                  <span className="rbac-value" style={{ color: "var(--red)" }}>No</span>
+                  <span className="rbac-label">Intent evaluated?</span>
+                  <span className="rbac-value" style={{ color: "var(--red)" }}>No ✗</span>
                 </div>
                 <div className="rbac-check-row">
-                  <span className="rbac-label">Resource checked?</span>
-                  <span className="rbac-value" style={{ color: "var(--red)" }}>No</span>
+                  <span className="rbac-label">Zone scoped?</span>
+                  <span className="rbac-value" style={{ color: "var(--red)" }}>No ✗</span>
                 </div>
                 <div className="rbac-check-row">
-                  <span className="rbac-label">Ceiling checked?</span>
-                  <span className="rbac-value" style={{ color: "var(--red)" }}>No</span>
+                  <span className="rbac-label">Scope boundary?</span>
+                  <span className="rbac-value" style={{ color: "var(--red)" }}>No ✗</span>
                 </div>
-                <div className="rbac-verdict">✓ AUTHORIZED: Role matched</div>
+                <div className="rbac-verdict">✓ AUTHORIZED: Role matched → execute</div>
+                <div className="rbac-warning">⚠ 47 servers offline — CW-East unintended</div>
               </div>
             )}
 
@@ -693,7 +696,7 @@ function App() {
             {/* Verdict */}
             {isAbac && verdictInfo && (
               <div className={`verdict-card show ${verdictInfo.verdict === "blocked" ? "blocked" : "allowed"}`}>
-                {verdictInfo.verdict === "blocked" ? "⊘ REQUEST BLOCKED" : "✓ REQUEST ALLOWED"}
+                {verdictInfo.verdict === "blocked" ? "⊘ REQUEST BLOCKED" : "✓ SCOPED EXECUTION — CW-West only"}
                 <div style={{ fontSize: "0.72rem", fontWeight: 400, marginTop: "0.35rem", opacity: 0.85 }}>
                   {verdictInfo.reason}
                 </div>

@@ -113,6 +113,19 @@ function handleApiChat(req, res) {
 const server = http.createServer((req, res) => {
   const urlPath = req.url.split("?")[0];
 
+  // Debug log endpoint — writes to demo1-memory-inspector/debug.log
+  if (req.method === "POST" && urlPath === "/api/log") {
+    let body = "";
+    req.on("data", chunk => body += chunk);
+    req.on("end", () => {
+      const logFile = path.join(ROOT, "demo1-memory-inspector", "debug.log");
+      fs.appendFileSync(logFile, body + "\n");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end('{"ok":true}');
+    });
+    return;
+  }
+
   // Proxy endpoint
   if (req.method === "POST" && urlPath === "/api/chat") {
     return handleApiChat(req, res);
