@@ -1,6 +1,6 @@
 # MLDS 2026: Agentic AI — Live Demos
 
-Three self-contained, interactive demos for the internal tech talk at vThink Global Technologies. Each demo targets a specific engineering concern in agentic AI: memory, access control, and database isolation.
+Four self-contained, interactive demos for the internal tech talk at vThink Global Technologies. Each demo targets a specific engineering concern in agentic AI: memory, access control, database isolation, and output quality.
 
 ---
 
@@ -41,18 +41,23 @@ Compares RBAC (role-based) vs ABAC (attribute-based) access control. Same user, 
 
 Shows how an agent uses database branching to safely explore multiple migration strategies in parallel. Failed branches turn red, the winning branch merges back to production.
 
+### Demo 04: RLAIF Lab
+
+Shows how grounding an agent against a knowledge base reduces factual errors over iterations. In ungrounded mode, the agent generates a research brief in a single shot. In grounded mode, a second model cross-checks every claim against verified facts and returns corrections. The first model rewrites incorporating those corrections. A word-level diff highlights changes, and metrics track edit distance decreasing with each iteration.
+
 ---
 
 ## Project structure
 
 ```
-├── index.html                          Landing page (3 demo cards)
+├── index.html                          Landing page
 ├── server.js                           Static server + Anthropic API proxy
 ├── demo1-memory-inspector/
 │   ├── index.html                      Single-file React app
 │   └── .env                            ANTHROPIC_API_KEY (gitignored)
 ├── demo2-abac/index.html
 ├── demo3-serverless-branching/index.html
+├── demo4-grounded-rlaif/index.html
 ├── knowledge/                          Background reading per topic
 │   ├── 01-agent-memory.md
 │   ├── 02-abac-in-agentic-systems.md
