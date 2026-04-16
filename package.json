@@ -1,0 +1,11 @@
+{
+  "name": "vthink-mlds-demos",
+  "version": "1.0.0",
+  "description": "MLDS 2026: Agentic AI live demos · vThink Global Technologies",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

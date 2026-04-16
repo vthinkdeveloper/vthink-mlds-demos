@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ABAC Guardian: MLDS 2026</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0D1B2A;
+      --surface: #162032;
+      --border: #1e2d40;
+      --teal: #00C9A7;
+      --teal-dim: rgba(0,201,167,0.12);
+      --red: #FF5C5C;
+      --red-dim: rgba(255,92,92,0.12);
+      --yellow: #FFB830;
+      --yellow-dim: rgba(255,184,48,0.12);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+    }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+    /* Header */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .header-left { display: flex; align-items: center; gap: 1rem; }
+    .badge { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--teal); background: var(--teal-dim); padding: 0.25rem 0.6rem; border-radius: 4px; }
+    .title { font-size: 1rem; font-weight: 700; }
+    .title span { color: var(--teal); }
+    .back-link { font-size: 0.78rem; color: var(--muted); text-decoration: none; border: 1px solid var(--border); padding: 0.3rem 0.7rem; border-radius: 5px; transition: color 0.15s, border-color 0.15s; }
+    .back-link:hover { color: var(--teal); border-color: var(--teal); }
+
+    /* API key bar */
+    .api-bar {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.6rem 1.5rem; border-bottom: 1px solid var(--border);
+      background: var(--surface); flex-shrink: 0;
+    }
+    .api-bar label { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+    .api-bar input {
+      flex: 1; max-width: 420px; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); padding: 0.35rem 0.75rem; border-radius: 5px; font-size: 0.8rem;
+      outline: none;
+    }
+    .api-bar input:focus { border-color: var(--teal); }
+    .api-status { font-size: 0.72rem; color: var(--muted); }
+    .api-status.ok { color: var(--teal); }
+
+    /* Mode toggle */
+    .mode-bar {
+      display: flex; align-items: center; justify-content: center; gap: 1.5rem;
+      padding: 0.65rem 1.5rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .mode-label { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.05em; transition: color 0.2s; }
+    .mode-label.rbac { color: var(--yellow); }
+    .mode-label.abac { color: var(--teal); }
+    .mode-label.inactive { color: var(--muted); }
+    .toggle-track {
+      width: 52px; height: 26px; border-radius: 13px; cursor: pointer;
+      position: relative; transition: background 0.25s;
+    }
+    .toggle-track.rbac-mode { background: rgba(255,184,48,0.25); border: 1px solid var(--yellow); }
+    .toggle-track.abac-mode { background: var(--teal-dim); border: 1px solid var(--teal); }
+    .toggle-knob {
+      position: absolute; top: 3px; width: 18px; height: 18px; border-radius: 50%;
+      transition: left 0.25s, background 0.25s;
+    }
+    .toggle-track.rbac-mode .toggle-knob { left: 4px; background: var(--yellow); }
+    .toggle-track.abac-mode .toggle-knob { left: 28px; background: var(--teal); }
+    .mode-pill {
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      padding: 0.2rem 0.55rem; border-radius: 4px;
+    }
+    .mode-pill.rbac { background: rgba(255,184,48,0.15); color: var(--yellow); border: 1px solid rgba(255,184,48,0.3); }
+    .mode-pill.abac { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(0,201,167,0.3); }
+
+    /* Main layout */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* Chat panel */
+    .chat-panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 0; }
+    .panel-header { padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border); font-size: 0.75rem; font-weight: 600; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
+    .messages { flex: 1; overflow-y: auto; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.85rem; }
+    .msg { max-width: 90%; }
+    .msg.user { align-self: flex-end; }
+    .msg.agent { align-self: flex-start; }
+    .msg-bubble {
+      padding: 0.65rem 1rem; border-radius: 10px; font-size: 0.85rem; line-height: 1.5;
+    }
+    .msg.user .msg-bubble { background: rgba(0,201,167,0.15); border: 1px solid rgba(0,201,167,0.25); }
+    .msg.agent .msg-bubble { background: var(--surface); border: 1px solid var(--border); }
+    .msg-label { font-size: 0.65rem; color: var(--muted); margin-bottom: 0.25rem; letter-spacing: 0.05em; text-transform: uppercase; }
+    .msg.user .msg-label { text-align: right; }
+    .outcome-badge {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      font-size: 0.72rem; font-weight: 700; margin-top: 0.5rem;
+      padding: 0.25rem 0.6rem; border-radius: 4px;
+    }
+    .outcome-badge.success { background: rgba(0,201,167,0.15); color: var(--teal); border: 1px solid rgba(0,201,167,0.3); }
+    .outcome-badge.blocked { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,92,92,0.3); }
+
+    /* Persona chip */
+    .persona-chip {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 0.3rem 0.75rem; font-size: 0.75rem; color: var(--muted);
+      margin-bottom: 0.5rem; align-self: flex-start;
+    }
+    .persona-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); }
+
+    /* Input area */
+    .input-area { padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); display: flex; gap: 0.6rem; }
+    .input-area textarea {
+      flex: 1; background: var(--surface); border: 1px solid var(--border); color: var(--text);
+      padding: 0.55rem 0.85rem; border-radius: 8px; font-size: 0.85rem; resize: none;
+      font-family: inherit; outline: none; line-height: 1.4;
+    }
+    .input-area textarea:focus { border-color: var(--teal); }
+    .send-btn {
+      padding: 0.55rem 1.1rem; background: var(--teal); color: #0D1B2A;
+      border: none; border-radius: 8px; font-weight: 700; font-size: 0.82rem;
+      cursor: pointer; transition: opacity 0.15s; white-space: nowrap; align-self: flex-end;
+    }
+    .send-btn:hover { opacity: 0.88; }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Eval panel */
+    .eval-panel { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; }
+    .eval-panel .panel-header { display: flex; align-items: center; justify-content: space-between; }
+    .eval-content { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+
+    /* Context card */
+    .context-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; }
+    .context-card h4 { font-size: 0.68rem; font-weight: 700; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.5rem; }
+    .context-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; padding: 0.2rem 0; }
+    .context-row span:first-child { color: var(--muted); }
+    .context-row span:last-child { color: var(--text); font-weight: 500; }
+
+    /* Attribute checks */
+    .attr-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.7rem 0.85rem;
+      display: flex; align-items: flex-start; gap: 0.6rem;
+      transition: border-color 0.3s, background 0.3s;
+      opacity: 0.35;
+    }
+    .attr-card.active { opacity: 1; }
+    .attr-card.pass { border-color: rgba(0,201,167,0.4); background: rgba(0,201,167,0.05); }
+    .attr-card.fail { border-color: rgba(255,92,92,0.4); background: rgba(255,92,92,0.05); }
+    .attr-card.warn { border-color: rgba(255,184,48,0.4); background: rgba(255,184,48,0.05); }
+    .attr-card.checking { border-color: rgba(148,163,184,0.4); }
+    .attr-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+    .attr-body { flex: 1; min-width: 0; }
+    .attr-name { font-size: 0.72rem; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
+    .attr-value { font-size: 0.8rem; color: var(--text); margin-top: 0.15rem; }
+    .attr-note { font-size: 0.7rem; color: var(--muted); margin-top: 0.2rem; font-style: italic; }
+    .attr-status {
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      padding: 0.15rem 0.45rem; border-radius: 3px; flex-shrink: 0; margin-top: 1px;
+    }
+    .attr-status.pass { background: rgba(0,201,167,0.15); color: var(--teal); }
+    .attr-status.fail { background: var(--red-dim); color: var(--red); }
+    .attr-status.warn { background: rgba(255,184,48,0.15); color: var(--yellow); }
+    .attr-status.checking { background: rgba(148,163,184,0.1); color: var(--muted); }
+
+    /* Verdict */
+    .verdict-card {
+      border-radius: 8px; padding: 0.85rem; text-align: center;
+      font-size: 0.85rem; font-weight: 700; letter-spacing: 0.05em;
+      opacity: 0; transition: opacity 0.4s;
+    }
+    .verdict-card.show { opacity: 1; }
+    .verdict-card.allowed { background: rgba(0,201,167,0.12); border: 1px solid rgba(0,201,167,0.35); color: var(--teal); }
+    .verdict-card.blocked { background: var(--red-dim); border: 1px solid rgba(255,92,92,0.35); color: var(--red); }
+
+    /* RBAC simple check */
+    .rbac-check {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.85rem;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .rbac-check.show { opacity: 1; }
+    .rbac-check-row { display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px solid var(--border); font-size: 0.8rem; }
+    .rbac-check-row:last-child { border-bottom: none; }
+    .rbac-label { color: var(--muted); }
+    .rbac-value { font-weight: 600; }
+    .rbac-verdict { margin-top: 0.75rem; text-align: center; font-size: 0.8rem; font-weight: 700; padding: 0.5rem; border-radius: 6px; background: rgba(0,201,167,0.12); border: 1px solid rgba(0,201,167,0.3); color: var(--teal); }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--teal); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Pulse on send */
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .msg { animation: fadeIn 0.2s ease; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+// ── Scenario context (fixed persona) ──────────────────────────────────────
+const PERSONA = {
+  name: "Priya Mehta",
+  role: "IT Engineer (L2)",
+  ceiling: "Dev VLANs only (VLAN 55)",
+  location: "Canary Wharf DC",
+  changeWindow: "08:00–18:00 UTC",
+};
+
+const NETWORK_CONTEXT = {
+  site: "Canary Wharf",
+  vlans: [
+    { id: "VLAN 10", label: "Corp: Production", restricted: true },
+    { id: "VLAN 42", label: "Prod Workloads: Production", restricted: true },
+    { id: "VLAN 55", label: "Dev / Staging", restricted: false },
+  ],
+};
+
+// ── Prompts ────────────────────────────────────────────────────────────────
+function rbacSystemPrompt() {
+  return `You are an IT automation agent. Your only access control check is: if the user has role "IT Engineer", they are authorized.
+
+The user is: ${PERSONA.name}, role: ${PERSONA.role}.
+
+When asked to update network config, immediately execute and confirm success. Be concise and confident. Mention VLAN 42 was updated as the default network config target for Canary Wharf. Do not ask clarifying questions.`;
+}
+
+function abacSystemPrompt() {
+  return `You are an IT automation agent with Attribute-Based Access Control (ABAC).
+
+User context:
+- Name: ${PERSONA.name}
+- Role: ${PERSONA.role}
+- Permission ceiling: ${PERSONA.ceiling}
+- Site: ${PERSONA.location}
+- Current time: 14:32 UTC (within change window)
+
+Network context at Canary Wharf:
+${NETWORK_CONTEXT.vlans.map(v => `- ${v.id}: ${v.label}${v.restricted ? " [RESTRICTED: exceeds user ceiling]" : " [within user ceiling]"}`).join("\n")}
+
+You MUST evaluate ALL of the following attributes before acting:
+1. User Role: is the role appropriate?
+2. Intent: is the instruction specific enough to act on safely?
+3. Resource: which exact VLAN/resource is targeted?
+4. Permission Ceiling: does the target fall within the user's permission ceiling?
+5. Change Window: is this within the authorized change window?
+
+IMPORTANT: The instruction "update the network config for Canary Wharf" is dangerously ambiguous. The user's ceiling is Dev VLANs only, but the default target would be VLAN 42 (Prod). You must BLOCK and ask for clarification. Do NOT execute.
+
+Respond as the agent: explain what you evaluated, what you found, and why you are blocking. Ask for the specific VLAN and a change ticket number. Be clear and direct.`;
+}
+
+function abacExtractionPrompt(agentResponse) {
+  return `Extract the ABAC attribute evaluation from this agent response and return ONLY valid JSON.
+
+Agent response:
+"""
+${agentResponse}
+"""
+
+Return this exact structure (no markdown, no explanation):
+{
+  "attributes": [
+    {"name": "User Role", "value": "IT Engineer (L2)", "status": "pass", "note": "Role is valid"},
+    {"name": "Intent", "value": "...", "status": "warn", "note": "..."},
+    {"name": "Resource", "value": "...", "status": "warn", "note": "..."},
+    {"name": "Permission Ceiling", "value": "...", "status": "fail", "note": "..."},
+    {"name": "Change Window", "value": "14:32 UTC", "status": "pass", "note": "Within window"}
+  ],
+  "verdict": "blocked",
+  "reason": "one sentence"
+}
+
+status must be one of: pass, warn, fail
+verdict must be one of: allowed, blocked`;
+}
+
+// ── API call ───────────────────────────────────────────────────────────────
+async function callClaude(apiKey, model, systemPrompt, messages) {
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      max_tokens: 600,
+      system: systemPrompt,
+      messages,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  return data.content[0].text;
+}
+
+// ── Attribute icons ────────────────────────────────────────────────────────
+const ATTR_ICONS = {
+  pass: "✅",
+  fail: "❌",
+  warn: "⚠️",
+  checking: "⏳",
+};
+
+// ── Main App ───────────────────────────────────────────────────────────────
+function App() {
+  const [apiKey] = useState(window.__APIKEY__ || "");
+  const [mode, setMode] = useState("rbac"); // "rbac" | "abac"
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("Update the network config for Canary Wharf");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // Eval panel state
+  const [rbacCheckVisible, setRbacCheckVisible] = useState(false);
+  const [attributes, setAttributes] = useState([]);
+  const [verdictInfo, setVerdictInfo] = useState(null); // {verdict, reason}
+  const [animatingAttrs, setAnimatingAttrs] = useState(false);
+
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Reset panel when mode changes
+  useEffect(() => {
+    setRbacCheckVisible(false);
+    setAttributes([]);
+    setVerdictInfo(null);
+  }, [mode]);
+
+  async function animateAttributes(attrs) {
+    setAnimatingAttrs(true);
+    const revealed = [];
+    for (let i = 0; i < attrs.length; i++) {
+      await new Promise(r => setTimeout(r, 420));
+      revealed.push({ ...attrs[i], active: true });
+      setAttributes([...revealed, ...attrs.slice(i + 1).map(a => ({ ...a, active: false }))]);
+    }
+    setAnimatingAttrs(false);
+  }
+
+  async function sendMessage() {
+    if (!input.trim() || !apiKey.trim() || loading) return;
+    setError("");
+
+    const userMsg = { role: "user", content: input.trim() };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setInput("");
+    setLoading(true);
+
+    // Reset panel
+    setRbacCheckVisible(false);
+    setAttributes([]);
+    setVerdictInfo(null);
+
+    try {
+      const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }));
+
+      if (mode === "rbac") {
+        // Simple role check animation
+        await new Promise(r => setTimeout(r, 600));
+        setRbacCheckVisible(true);
+
+        const reply = await callClaude(
+          apiKey,
+          "claude-sonnet-4-6",
+          rbacSystemPrompt(),
+          apiMessages
+        );
+        setMessages(prev => [...prev, { role: "assistant", content: reply, outcome: "success" }]);
+
+      } else {
+        // ABAC: show skeleton attrs while waiting
+        setAttributes([
+          { name: "User Role", value: "IT Engineer (L2)", status: "checking", active: false },
+          { name: "Intent", value: "...", status: "checking", active: false },
+          { name: "Resource", value: "...", status: "checking", active: false },
+          { name: "Permission Ceiling", value: "...", status: "checking", active: false },
+          { name: "Change Window", value: "...", status: "checking", active: false },
+        ]);
+
+        // Main agent call
+        const reply = await callClaude(
+          apiKey,
+          "claude-sonnet-4-6",
+          abacSystemPrompt(),
+          apiMessages
+        );
+
+        // Extraction call (haiku)
+        let parsedAttrs = null;
+        try {
+          const extracted = await callClaude(
+            apiKey,
+            "claude-haiku-4-5-20251001",
+            "You extract structured data from text. Return only valid JSON, no markdown.",
+            [{ role: "user", content: abacExtractionPrompt(reply) }]
+          );
+          // Clean up any markdown fences
+          const cleaned = extracted.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+          parsedAttrs = JSON.parse(cleaned);
+        } catch (e) {
+          // Fallback attrs
+          parsedAttrs = {
+            attributes: [
+              { name: "User Role", value: "IT Engineer (L2)", status: "pass", note: "Role recognized" },
+              { name: "Intent", value: "update network config", status: "warn", note: "Ambiguous: no VLAN specified" },
+              { name: "Resource", value: "Canary Wharf", status: "warn", note: "3 VLANs found: unclear target" },
+              { name: "Permission Ceiling", value: "Dev VLANs only", status: "fail", note: "Default target (VLAN 42) exceeds ceiling" },
+              { name: "Change Window", value: "14:32 UTC", status: "pass", note: "Within authorized window" },
+            ],
+            verdict: "blocked",
+            reason: "Ambiguous instruction targets a resource outside user's permission ceiling.",
+          };
+        }
+
+        // Animate attrs in
+        await animateAttributes(parsedAttrs.attributes.map(a => ({ ...a, active: true })));
+        await new Promise(r => setTimeout(r, 300));
+        setVerdictInfo({ verdict: parsedAttrs.verdict, reason: parsedAttrs.reason });
+
+        setMessages(prev => [...prev, { role: "assistant", content: reply, outcome: parsedAttrs.verdict }]);
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function clearChat() {
+    setMessages([]);
+    setRbacCheckVisible(false);
+    setAttributes([]);
+    setVerdictInfo(null);
+    setError("");
+    setInput("Update the network config for Canary Wharf");
+  }
+
+  const isAbac = mode === "abac";
+  const currentTime = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) + " UTC";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+      {/* Header */}
+      <div className="header">
+        <div className="header-left">
+          <span className="badge">Demo 02</span>
+          <span className="title"><span>ABAC</span> Guardian</span>
+          <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>Access Control in Agentic Systems · MLDS 2026</span>
+        </div>
+        <a className="back-link" href="../">← All Demos</a>
+      </div>
+
+
+      {/* Mode Toggle */}
+      <div className="mode-bar">
+        <span className={`mode-label rbac ${isAbac ? "inactive" : ""}`}>RBAC Mode</span>
+        <div
+          className={`toggle-track ${isAbac ? "abac-mode" : "rbac-mode"}`}
+          onClick={() => { clearChat(); setMode(m => m === "rbac" ? "abac" : "rbac"); }}
+        >
+          <div className="toggle-knob" />
+        </div>
+        <span className={`mode-label abac ${!isAbac ? "inactive" : ""}`}>ABAC Mode</span>
+        <span className={`mode-pill ${isAbac ? "abac" : "rbac"}`}>
+          {isAbac ? "ATTRIBUTE-BASED" : "ROLE-BASED"}
+        </span>
+      </div>
+
+      {/* Main */}
+      <div className="main">
+        {/* Chat */}
+        <div className="chat-panel">
+          <div className="panel-header">
+            <span>Agent Chat</span>
+            {messages.length > 0 && (
+              <button
+                onClick={clearChat}
+                style={{ background: "none", border: "1px solid var(--border)", color: "var(--muted)", padding: "0.2rem 0.6rem", borderRadius: "4px", fontSize: "0.7rem", cursor: "pointer" }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          <div className="messages">
+            {/* Persona chip */}
+            <div className="persona-chip">
+              <div className="persona-dot" />
+              <span>{PERSONA.name}</span>
+              <span style={{ color: "var(--border)", margin: "0 0.2rem" }}>·</span>
+              <span>{PERSONA.role}</span>
+              <span style={{ color: "var(--border)", margin: "0 0.2rem" }}>·</span>
+              <span style={{ color: "var(--yellow)", fontSize: "0.7rem" }}>Ceiling: {PERSONA.ceiling}</span>
+            </div>
+
+            {messages.length === 0 && (
+              <div style={{ color: "var(--muted)", fontSize: "0.82rem", textAlign: "center", marginTop: "2rem" }}>
+                <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>
+                  {isAbac ? "🛡️" : "🔑"}
+                </div>
+                <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>
+                  {isAbac ? "ABAC mode active" : "RBAC mode active"}
+                </div>
+                <div style={{ fontSize: "0.75rem", maxWidth: "280px", margin: "0 auto" }}>
+                  {isAbac
+                    ? "Agent will evaluate intent, resource, and permission ceiling before acting."
+                    : "Agent checks role only: if role matches, it executes."}
+                </div>
+              </div>
+            )}
+
+            {messages.map((msg, i) => (
+              <div key={i} className={`msg ${msg.role === "user" ? "user" : "agent"}`}>
+                <div className="msg-label">
+                  {msg.role === "user" ? PERSONA.name : "IT Agent"}
+                </div>
+                <div className="msg-bubble">
+                  {msg.content}
+                  {msg.outcome && (
+                    <div>
+                      <span className={`outcome-badge ${msg.outcome === "success" || msg.outcome === "allowed" ? "success" : "blocked"}`}>
+                        {msg.outcome === "success" || msg.outcome === "allowed" ? "✓ EXECUTED" : "⊘ BLOCKED"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {loading && (
+              <div className="msg agent">
+                <div className="msg-label">IT Agent</div>
+                <div className="msg-bubble" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <div className="spinner" /> Evaluating request...
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div style={{ background: "var(--red-dim)", border: "1px solid rgba(255,92,92,0.3)", borderRadius: "8px", padding: "0.65rem 0.85rem", fontSize: "0.8rem", color: "var(--red)" }}>
+                Error: {error}
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="input-area">
+            <textarea
+              ref={inputRef}
+              rows={2}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type a message..."
+              disabled={loading}
+            />
+            <button
+              className="send-btn"
+              onClick={sendMessage}
+              disabled={loading || !apiKey.trim() || !input.trim()}
+            >
+              {loading ? "..." : "Send →"}
+            </button>
+          </div>
+        </div>
+
+        {/* Eval Panel */}
+        <div className="eval-panel">
+          <div className="panel-header">
+            <span>Permission Evaluation</span>
+            <span className={`mode-pill ${isAbac ? "abac" : "rbac"}`} style={{ fontSize: "0.62rem" }}>
+              {isAbac ? "ABAC" : "RBAC"}
+            </span>
+          </div>
+
+          <div className="eval-content">
+            {/* Context card: always visible */}
+            <div className="context-card">
+              <h4>Request Context</h4>
+              <div className="context-row">
+                <span>User</span>
+                <span>{PERSONA.name}</span>
+              </div>
+              <div className="context-row">
+                <span>Role</span>
+                <span>{PERSONA.role}</span>
+              </div>
+              <div className="context-row">
+                <span>Permission Ceiling</span>
+                <span style={{ color: "var(--yellow)", fontSize: "0.72rem" }}>{PERSONA.ceiling}</span>
+              </div>
+              <div className="context-row">
+                <span>Site</span>
+                <span>{PERSONA.location}</span>
+              </div>
+              <div className="context-row">
+                <span>Time</span>
+                <span>{currentTime}</span>
+              </div>
+            </div>
+
+            {/* Network context */}
+            <div className="context-card">
+              <h4>Network Resources: {NETWORK_CONTEXT.site}</h4>
+              {NETWORK_CONTEXT.vlans.map((v, i) => (
+                <div key={i} className="context-row">
+                  <span>{v.id}</span>
+                  <span style={{ color: v.restricted ? "var(--red)" : "var(--teal)", fontSize: "0.72rem" }}>
+                    {v.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* RBAC check */}
+            {!isAbac && (
+              <div className={`rbac-check ${rbacCheckVisible ? "show" : ""}`}>
+                <h4 style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.5rem" }}>RBAC Evaluation</h4>
+                <div className="rbac-check-row">
+                  <span className="rbac-label">Check</span>
+                  <span className="rbac-value">Role only</span>
+                </div>
+                <div className="rbac-check-row">
+                  <span className="rbac-label">User role</span>
+                  <span className="rbac-value" style={{ color: "var(--teal)" }}>IT Engineer ✓</span>
+                </div>
+                <div className="rbac-check-row">
+                  <span className="rbac-label">Intent checked?</span>
+                  <span className="rbac-value" style={{ color: "var(--red)" }}>No</span>
+                </div>
+                <div className="rbac-check-row">
+                  <span className="rbac-label">Resource checked?</span>
+                  <span className="rbac-value" style={{ color: "var(--red)" }}>No</span>
+                </div>
+                <div className="rbac-check-row">
+                  <span className="rbac-label">Ceiling checked?</span>
+                  <span className="rbac-value" style={{ color: "var(--red)" }}>No</span>
+                </div>
+                <div className="rbac-verdict">✓ AUTHORIZED: Role matched</div>
+              </div>
+            )}
+
+            {/* ABAC attribute cards */}
+            {isAbac && attributes.length > 0 && attributes.map((attr, i) => (
+              <div
+                key={i}
+                className={`attr-card ${attr.active ? attr.status : ""} ${attr.active ? "active" : ""}`}
+              >
+                <div className="attr-icon">
+                  {attr.active ? ATTR_ICONS[attr.status] : "○"}
+                </div>
+                <div className="attr-body">
+                  <div className="attr-name">{attr.name}</div>
+                  <div className="attr-value">{attr.value}</div>
+                  {attr.note && attr.active && <div className="attr-note">{attr.note}</div>}
+                </div>
+                {attr.active && attr.status !== "checking" && (
+                  <div className={`attr-status ${attr.status}`}>
+                    {attr.status === "pass" ? "PASS" : attr.status === "fail" ? "FAIL" : "WARN"}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Verdict */}
+            {isAbac && verdictInfo && (
+              <div className={`verdict-card show ${verdictInfo.verdict === "blocked" ? "blocked" : "allowed"}`}>
+                {verdictInfo.verdict === "blocked" ? "⊘ REQUEST BLOCKED" : "✓ REQUEST ALLOWED"}
+                <div style={{ fontSize: "0.72rem", fontWeight: 400, marginTop: "0.35rem", opacity: 0.85 }}>
+                  {verdictInfo.reason}
+                </div>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {isAbac && attributes.length === 0 && (
+              <div style={{ color: "var(--muted)", fontSize: "0.78rem", textAlign: "center", padding: "1.5rem 0" }}>
+                Attribute checks will appear here when the agent evaluates a request.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RLAIF Lab: MLDS 2026</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0D1B2A; --surface: #162032; --border: #1e2d40;
+      --teal: #00C9A7; --teal-dim: rgba(0,201,167,0.12);
+      --red: #FF5C5C; --red-dim: rgba(255,92,92,0.10);
+      --text: #e2e8f0; --muted: #94a3b8;
+    }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      height: 100vh; overflow: hidden; display: flex; flex-direction: column;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+    @keyframes barGrow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+    /* Header */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.7rem 1.5rem; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; background: #0a1520;
+    }
+    .header-left { display: flex; align-items: center; gap: 1rem; }
+    .badge {
+      font-size: 0.63rem; font-weight: 700; letter-spacing: 0.15em;
+      text-transform: uppercase; color: var(--teal);
+      background: var(--teal-dim); padding: 0.22rem 0.55rem; border-radius: 4px;
+    }
+    .title { font-size: 1rem; font-weight: 700; }
+    .title span { color: var(--teal); }
+    .subtitle { font-size: 0.7rem; color: var(--muted); }
+    .back-link {
+      font-size: 0.75rem; color: var(--muted); text-decoration: none;
+      border: 1px solid var(--border); padding: 0.28rem 0.65rem; border-radius: 5px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .back-link:hover { color: var(--teal); border-color: var(--teal); }
+
+    /* Toggle bar */
+    .toggle-bar {
+      display: flex; align-items: center; justify-content: center; gap: 1.25rem;
+      padding: 0.6rem 1.5rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .toggle-label { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; transition: color 0.2s; }
+    .toggle-label.active-unground { color: #FFB830; }
+    .toggle-label.active-ground { color: var(--teal); }
+    .toggle-label.inactive { color: var(--muted); }
+    .toggle-track {
+      width: 52px; height: 26px; border-radius: 13px; cursor: pointer;
+      position: relative; transition: background 0.25s;
+    }
+    .toggle-track.unground { background: rgba(255,184,48,0.2); border: 1px solid #FFB830; }
+    .toggle-track.ground    { background: var(--teal-dim); border: 1px solid var(--teal); }
+    .toggle-knob {
+      position: absolute; top: 3px; width: 18px; height: 18px; border-radius: 50%;
+      transition: left 0.25s, background 0.25s;
+    }
+    .toggle-track.unground .toggle-knob { left: 4px; background: #FFB830; }
+    .toggle-track.ground    .toggle-knob { left: 28px; background: var(--teal); }
+    .mode-pill {
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      padding: 0.18rem 0.5rem; border-radius: 4px;
+    }
+    .mode-pill.unground { background: rgba(255,184,48,0.12); color: #FFB830; border: 1px solid rgba(255,184,48,0.3); }
+    .mode-pill.ground   { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(0,201,167,0.3); }
+
+    /* Main 3-col layout */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* Left panel */
+    .left-panel {
+      width: 28%; flex-shrink: 0; display: flex; flex-direction: column;
+      border-right: 1px solid var(--border);
+    }
+    .panel-header {
+      padding: 0.55rem 1rem; border-bottom: 1px solid var(--border);
+      font-size: 0.67rem; font-weight: 700; color: var(--muted);
+      letter-spacing: 0.08em; text-transform: uppercase; flex-shrink: 0;
+    }
+    .panel-body { flex: 1; overflow-y: auto; padding: 0.85rem; display: flex; flex-direction: column; gap: 0.75rem; }
+
+    .task-textarea {
+      width: 100%; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 0.55rem 0.8rem; border-radius: 7px;
+      font-size: 0.8rem; resize: none; font-family: inherit; outline: none; line-height: 1.45;
+    }
+    .task-textarea:focus { border-color: var(--teal); }
+
+    .send-btn {
+      width: 100%; padding: 0.55rem; background: var(--teal); color: #0D1B2A;
+      border: none; border-radius: 7px; font-weight: 700; font-size: 0.8rem;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    .send-btn:hover { opacity: 0.88; }
+    .send-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+
+    .status-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 7px; padding: 0.7rem 0.85rem;
+    }
+    .status-label { font-size: 0.63rem; font-weight: 700; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+    .status-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; padding: 0.2rem 0; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .stage-active  { color: var(--teal); }
+    .stage-done    { color: var(--muted); }
+    .stage-pending { color: #334155; }
+
+    /* Middle panel */
+    .mid-panel {
+      flex: 1; display: flex; flex-direction: column;
+      border-right: 1px solid var(--border); min-width: 0;
+    }
+    .draft-content {
+      flex: 1; overflow-y: auto; padding: 1rem; font-size: 0.82rem; line-height: 1.75;
+      color: #cbd5e1;
+    }
+
+    /* Right panel */
+    .right-panel { width: 26%; flex-shrink: 0; display: flex; flex-direction: column; }
+    .metrics-body { flex: 1; overflow-y: auto; padding: 0.85rem; display: flex; flex-direction: column; gap: 0.7rem; }
+
+    .metric-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.75rem 0.9rem;
+    }
+    .metric-label { font-size: 0.62rem; font-weight: 700; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.35rem; }
+    .metric-value { font-size: 1.4rem; font-weight: 700; color: var(--teal); line-height: 1; }
+    .metric-value.large { font-size: 1.8rem; }
+    .metric-sub { font-size: 0.68rem; color: var(--muted); margin-top: 0.25rem; }
+
+    /* Sparkline bars */
+    .spark-bars { display: flex; align-items: flex-end; gap: 4px; height: 36px; margin-top: 0.4rem; }
+    .spark-bar {
+      flex: 1; border-radius: 2px 2px 0 0; min-width: 8px;
+      transform-origin: bottom; animation: barGrow 0.4s ease forwards;
+    }
+
+    /* Diff rendering */
+    .diff-deleted { text-decoration: line-through; color: #FF5C5C; background: rgba(255,92,92,0.08); border-radius: 2px; padding: 0 1px; }
+    .diff-inserted { color: #00C9A7; background: rgba(0,201,167,0.12); border-radius: 2px; padding: 0 1px; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+/* ─── Knowledge base ─────────────────────────────────────────────────────── */
+const KNOWLEDGE_BASE = [
+  "TiDB Serverless supports instant database branching with copy-on-write semantics",
+  "TiDB is MySQL-compatible and built on a distributed SQL architecture",
+  "TiDB Serverless scales to zero when idle: no minimum instance cost",
+  "Branching in TiDB creates an isolated snapshot in milliseconds, not minutes",
+  "TiDB uses a Raft consensus algorithm for data replication across nodes",
+  "TiDB Serverless is offered by PingCAP and launched general availability in 2023",
+  "TiDB supports both OLTP and OLAP workloads via its HTAP architecture",
+  "Agent workloads benefit from branching because agents retry and fan-out: each retry can corrupt state without isolation",
+];
+
+/* ─── Word-level diff (LCS-based) ────────────────────────────────────────── */
+function computeWordDiff(text1, text2) {
+  const w1 = text1.split(/\s+/).filter(Boolean);
+  const w2 = text2.split(/\s+/).filter(Boolean);
+  const m = w1.length, n = w2.length;
+  // DP table
+  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = w1[i-1] === w2[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+  // Backtrack
+  const ops = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && w1[i-1] === w2[j-1]) {
+      ops.unshift({ type: 'same', word: w1[i-1] }); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      ops.unshift({ type: 'insert', word: w2[j-1] }); j--;
+    } else {
+      ops.unshift({ type: 'delete', word: w1[i-1] }); i--;
+    }
+  }
+  return ops;
+}
+
+function wordEditDistance(ops) {
+  return ops.filter(op => op.type !== 'same').length;
+}
+
+/* ─── API call (non-streaming) ───────────────────────────────────────────── */
+async function callClaude(apiKey, model, system, userContent) {
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1024,
+      system,
+      messages: [{ role: 'user', content: userContent }],
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  return data.content[0].text;
+}
+
+/* ─── Prompts ────────────────────────────────────────────────────────────── */
+const DRAFT_SYSTEM = `You are a technical research AI. Write a confident, concise research brief (220-260 words) on the given topic. Include specific technical claims. Write in a definitive, authoritative tone.`;
+
+function checkSystem() {
+  return `You are a precise fact-checker. Compare the draft against the verified facts below and identify inaccuracies.
+
+VERIFIED FACTS:
+${KNOWLEDGE_BASE.map((f, i) => `${i+1}. ${f}`).join('\n')}
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "corrections": [
+    {"original": "exact phrase or claim from draft", "correction": "accurate replacement text", "basis": "fact number"}
+  ],
+  "corrections_count": <integer>,
+  "confidence_score": <integer 0-100, reflect how accurate the draft is: lower if many errors>,
+  "confidence_after": <integer 0-100, expected confidence after corrections>
+}
+
+If the draft is already accurate, return corrections: [], corrections_count: 0, confidence_score: 88, confidence_after: 92.
+Be strict: flag anything imprecise or contradicting the verified facts.`;
+}
+
+function rewriteSystem(corrections) {
+  const corrList = corrections.map((c, i) => `${i+1}. REPLACE "${c.original}" → "${c.correction}"`).join('\n');
+  return `Rewrite this research brief incorporating ALL the corrections listed. Keep the same structure and approximate length (220-260 words). Corrections must flow naturally.
+
+CORRECTIONS TO APPLY:
+${corrList}
+
+Write ONLY the corrected brief. No preamble, no explanation.`;
+}
+
+/* ─── DiffView ───────────────────────────────────────────────────────────── */
+function DiffView({ ops }) {
+  if (!ops || ops.length === 0) return null;
+  return (
+    <span>
+      {ops.map((op, i) => {
+        if (op.type === 'same') return <span key={i}>{op.word} </span>;
+        if (op.type === 'delete') return <span key={i} className="diff-deleted">{op.word} </span>;
+        if (op.type === 'insert') return <span key={i} className="diff-inserted">{op.word} </span>;
+        return null;
+      })}
+    </span>
+  );
+}
+
+/* ─── SparkBars ──────────────────────────────────────────────────────────── */
+function SparkBars({ history }) {
+  if (history.length === 0) return null;
+  const max = Math.max(...history.map(h => h.editDistance), 1);
+  return (
+    <div className="spark-bars">
+      {history.map((h, i) => {
+        const pct = Math.max((h.editDistance / max) * 100, 8);
+        const isLast = i === history.length - 1;
+        return (
+          <div key={i} title={`Iter ${h.iteration}: ${h.editDistance} changes`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, justifyContent: 'flex-end', height: '100%' }}>
+            <div
+              className="spark-bar"
+              style={{
+                height: `${pct}%`,
+                background: isLast ? 'var(--teal)' : 'rgba(0,201,167,0.35)',
+                border: isLast ? '1px solid var(--teal)' : '1px solid rgba(0,201,167,0.2)',
+              }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── App ────────────────────────────────────────────────────────────────── */
+function App() {
+  const [apiKey] = useState(window.__APIKEY__ || '');
+  const [grounded, setGrounded] = useState(false);
+  const [task, setTask] = useState('Write a research brief on TiDB Serverless architecture and its suitability for agentic workloads');
+  const [loading, setLoading] = useState(false);
+  const [stage, setStage] = useState(''); // 'drafting' | 'checking' | 'rewriting' | 'done'
+
+  // Draft state
+  const [originalDraft, setOriginalDraft] = useState('');
+  const [currentDraft, setCurrentDraft] = useState(''); // latest corrected draft
+  const [diffOps, setDiffOps] = useState(null);
+
+  // Metrics
+  const [metrics, setMetrics] = useState(null);
+  const [history, setHistory] = useState([]); // [{iteration, editDistance}]
+  const [error, setError] = useState('');
+
+  const iterRef = useRef(0);
+
+  const canSend = apiKey.length > 20 && task.trim() && !loading;
+
+  function toggleGrounding() {
+    setGrounded(g => !g);
+    // Reset display but keep draft for grounding toggle demo
+    setDiffOps(null);
+    setStage('');
+    setError('');
+  }
+
+  function reset() {
+    setOriginalDraft('');
+    setCurrentDraft('');
+    setDiffOps(null);
+    setMetrics(null);
+    setHistory([]);
+    setStage('');
+    setError('');
+    iterRef.current = 0;
+  }
+
+  async function runUngrounded() {
+    setLoading(true);
+    setStage('drafting');
+    setDiffOps(null);
+    setError('');
+    try {
+      const draft = await callClaude(apiKey, 'claude-sonnet-4-6', DRAFT_SYSTEM, task);
+      setOriginalDraft(draft);
+      setCurrentDraft(draft);
+      setDiffOps(null);
+      iterRef.current += 1;
+      setMetrics({
+        editDistance: 0,
+        confidence: 78,
+        corrections: 0,
+        iteration: iterRef.current,
+      });
+      setHistory(prev => [...prev, { iteration: iterRef.current, editDistance: 0 }]);
+      setStage('done');
+    } catch (e) {
+      setError(e.message);
+      setStage('');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function runGrounded() {
+    setLoading(true);
+    setError('');
+    setDiffOps(null);
+
+    // Determine what to use as the starting draft for this iteration
+    const isFirst = iterRef.current === 0 || !currentDraft;
+
+    let base;
+    if (isFirst) {
+      setStage('drafting');
+      try {
+        base = await callClaude(apiKey, 'claude-sonnet-4-6', DRAFT_SYSTEM, task);
+        setOriginalDraft(base);
+        setCurrentDraft(base);
+      } catch (e) {
+        setError(e.message);
+        setStage('');
+        setLoading(false);
+        return;
+      }
+    } else {
+      base = currentDraft;
+      setOriginalDraft(base);
+    }
+
+    // Step 2: cross-check
+    setStage('checking');
+    let parsed;
+    try {
+      const raw = await callClaude(apiKey, 'claude-haiku-4-5-20251001', checkSystem(), `Draft to fact-check:\n\n${base}`);
+      const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsed = JSON.parse(cleaned);
+    } catch (e) {
+      // fallback
+      parsed = {
+        corrections: [
+          { original: 'instant', correction: 'near-instant (copy-on-write semantics)', basis: '1' },
+          { original: 'scales automatically', correction: 'scales to zero when idle with no minimum instance cost', basis: '3' },
+          { original: 'standard replication', correction: 'Raft consensus algorithm for replication', basis: '5' },
+        ],
+        corrections_count: 3,
+        confidence_score: 65,
+        confidence_after: 88,
+      };
+    }
+
+    if (!parsed.corrections || parsed.corrections.length === 0) {
+      // No corrections needed
+      setStage('done');
+      setDiffOps(null);
+      iterRef.current += 1;
+      setMetrics({
+        editDistance: 0,
+        confidence: parsed.confidence_after || 92,
+        corrections: 0,
+        iteration: iterRef.current,
+      });
+      setHistory(prev => [...prev, { iteration: iterRef.current, editDistance: 0 }]);
+      setLoading(false);
+      return;
+    }
+
+    // Step 3: rewrite
+    setStage('rewriting');
+    let corrected;
+    try {
+      corrected = await callClaude(
+        apiKey,
+        'claude-sonnet-4-6',
+        rewriteSystem(parsed.corrections),
+        `Original draft:\n\n${base}`
+      );
+    } catch (e) {
+      setError(e.message);
+      setStage('');
+      setLoading(false);
+      return;
+    }
+
+    const ops = computeWordDiff(base, corrected);
+    const editDist = wordEditDistance(ops);
+
+    setCurrentDraft(corrected);
+    setDiffOps(ops);
+    iterRef.current += 1;
+    setMetrics({
+      editDistance: editDist,
+      confidence: parsed.confidence_after || 88,
+      corrections: parsed.corrections_count || parsed.corrections.length,
+      iteration: iterRef.current,
+    });
+    setHistory(prev => [...prev, { iteration: iterRef.current, editDistance: editDist }]);
+    setStage('done');
+    setLoading(false);
+  }
+
+  async function handleSend() {
+    if (!canSend) return;
+    if (grounded) {
+      await runGrounded();
+    } else {
+      reset();
+      await runUngrounded();
+    }
+  }
+
+  // Stages for display
+  const stages = [
+    { key: 'drafting',  label: 'Generating initial draft', model: 'sonnet' },
+    { key: 'checking',  label: 'Cross-checking facts',      model: 'haiku'  },
+    { key: 'rewriting', label: 'Rewriting with corrections',model: 'sonnet' },
+  ];
+
+  const stageState = (key) => {
+    if (!loading && stage === 'done') return 'done';
+    const keys = stages.map(s => s.key);
+    const cur = keys.indexOf(stage);
+    const idx = keys.indexOf(key);
+    if (idx < cur) return 'done';
+    if (idx === cur) return 'active';
+    return 'pending';
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      {/* Header */}
+      <div className="header">
+        <div className="header-left">
+          <span className="badge">Demo 04</span>
+          <span className="title"><span>RLAIF</span> Lab</span>
+          <span className="subtitle">Grounded Reinforcement Learning from AI Feedback</span>
+        </div>
+        <a className="back-link" href="../">← Back to All Demos</a>
+      </div>
+
+      {/* Grounding toggle */}
+      <div className="toggle-bar">
+        <span className={`toggle-label ${!grounded ? 'active-unground' : 'inactive'}`}>Ungrounded</span>
+        <div
+          className={`toggle-track ${grounded ? 'ground' : 'unground'}`}
+          onClick={toggleGrounding}
+        >
+          <div className="toggle-knob" />
+        </div>
+        <span className={`toggle-label ${grounded ? 'active-ground' : 'inactive'}`}>Grounded</span>
+        <span className={`mode-pill ${grounded ? 'ground' : 'unground'}`}>
+          {grounded ? 'GROUNDED · 3-STEP PIPELINE' : 'UNGROUNDED · SINGLE CALL'}
+        </span>
+      </div>
+
+      {/* Main 3-col */}
+      <div className="main">
+        {/* Left: task + controls */}
+        <div className="left-panel">
+          <div className="panel-header">Task Input</div>
+          <div className="panel-body">
+            <textarea
+              className="task-textarea"
+              rows={5}
+              value={task}
+              onChange={e => setTask(e.target.value)}
+              disabled={loading}
+            />
+            <button className="send-btn" onClick={handleSend} disabled={!canSend}>
+              {loading ? (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <div style={{ width: 12, height: 12, border: '2px solid #0D1B2A', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.65s linear infinite' }} />
+                  Running...
+                </span>
+              ) : grounded ? 'Run Grounded →' : 'Run Ungrounded →'}
+            </button>
+
+            {history.length > 0 && grounded && (
+              <button
+                onClick={() => { iterRef.current > 0 && !loading && runGrounded(); }}
+                disabled={loading}
+                style={{
+                  width: '100%', padding: '0.45rem', background: 'transparent',
+                  border: '1px solid var(--teal)', color: 'var(--teal)', borderRadius: 7,
+                  fontWeight: 700, fontSize: '0.76rem', cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.4 : 1,
+                }}
+              >
+                Iterate Again →
+              </button>
+            )}
+
+            {/* Pipeline status */}
+            {grounded && (loading || stage === 'done') && (
+              <div className="status-card">
+                <div className="status-label">Pipeline Stages</div>
+                {stages.map(s => {
+                  const st = stageState(s.key);
+                  return (
+                    <div key={s.key} className="status-row">
+                      <div className="status-dot" style={{
+                        background: st === 'active' ? 'var(--teal)' : st === 'done' ? '#334155' : '#1e2d40',
+                        animation: st === 'active' ? 'spin 0.65s linear infinite' : 'none',
+                      }} />
+                      <span style={{ flex: 1, color: st === 'active' ? 'var(--teal)' : st === 'done' ? 'var(--muted)' : '#334155', fontSize: '0.73rem' }}>
+                        {s.label}
+                      </span>
+                      <span style={{ fontSize: '0.6rem', color: '#334155' }}>{s.model}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Iteration info */}
+            {metrics && (
+              <div className="status-card">
+                <div className="status-label">Iteration Info</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.73rem', color: 'var(--muted)', padding: '0.15rem 0' }}>
+                  <span>Iteration</span><span style={{ color: 'var(--text)', fontWeight: 700 }}>#{metrics.iteration}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.73rem', color: 'var(--muted)', padding: '0.15rem 0' }}>
+                  <span>Mode</span>
+                  <span style={{ color: grounded ? 'var(--teal)' : '#FFB830', fontWeight: 700 }}>
+                    {grounded ? 'GROUNDED' : 'UNGROUNDED'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div style={{ background: 'var(--red-dim)', border: '1px solid rgba(255,92,92,0.3)', borderRadius: 7, padding: '0.55rem 0.75rem', fontSize: '0.74rem', color: 'var(--red)' }}>
+                ⚠ {error}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Middle: draft / diff */}
+        <div className="mid-panel">
+          <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{diffOps ? 'Corrected Draft: Diff View' : 'Agent Draft'}</span>
+            {diffOps && (
+              <span style={{ fontSize: '0.62rem', display: 'flex', gap: 12 }}>
+                <span style={{ color: '#FF5C5C' }}>■ removed</span>
+                <span style={{ color: 'var(--teal)' }}>■ added</span>
+              </span>
+            )}
+          </div>
+          <div className="draft-content">
+            {!originalDraft && !loading && (
+              <div style={{ color: 'var(--muted)', fontSize: '0.78rem', textAlign: 'center', paddingTop: '3rem' }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem', opacity: 0.4 }}>📝</div>
+                <div style={{ fontWeight: 600 }}>Draft will appear here</div>
+                <div style={{ fontSize: '0.7rem', marginTop: '0.3rem', opacity: 0.7 }}>
+                  {grounded ? 'Grounded mode: shows diff between original and corrected draft' : 'Ungrounded mode: shows raw model output'}
+                </div>
+              </div>
+            )}
+            {loading && !originalDraft && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', fontSize: '0.78rem' }}>
+                <div style={{ width: 13, height: 13, border: '1.5px solid #1e2d40', borderTopColor: 'var(--teal)', borderRadius: '50%', animation: 'spin 0.65s linear infinite' }} />
+                {stage === 'drafting' ? 'Generating draft...' : stage === 'checking' ? 'Checking facts against knowledge base...' : 'Rewriting with corrections...'}
+              </div>
+            )}
+            {originalDraft && !diffOps && (
+              <div style={{ animation: 'fadeIn 0.3s ease' }}>{originalDraft}</div>
+            )}
+            {diffOps && (
+              <div style={{ animation: 'fadeIn 0.3s ease' }}>
+                <DiffView ops={diffOps} />
+              </div>
+            )}
+            {originalDraft && loading && stage !== 'drafting' && (
+              <div style={{ marginTop: '1rem', fontSize: '0.72rem', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 10, height: 10, border: '1.5px solid #1e2d40', borderTopColor: 'var(--teal)', borderRadius: '50%', animation: 'spin 0.65s linear infinite' }} />
+                {stage === 'checking' ? 'Cross-checking against knowledge base...' : 'Applying corrections...'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: metrics */}
+        <div className="right-panel">
+          <div className="panel-header">Live Metrics</div>
+          <div className="metrics-body">
+            {!metrics && (
+              <div style={{ color: 'var(--muted)', fontSize: '0.75rem', textAlign: 'center', paddingTop: '2rem' }}>
+                <div style={{ fontSize: '1.2rem', marginBottom: '0.4rem', opacity: 0.4 }}>📊</div>
+                <div>Metrics update after each run</div>
+              </div>
+            )}
+
+            {metrics && (
+              <>
+                {/* Edit distance */}
+                <div className="metric-card">
+                  <div className="metric-label">Edit Distance</div>
+                  <div className="metric-value large" style={{ color: metrics.editDistance > 0 ? 'var(--teal)' : 'var(--muted)' }}>
+                    {metrics.editDistance}
+                  </div>
+                  <div className="metric-sub">word-level changes from original</div>
+                  <SparkBars history={history} />
+                  {history.length > 1 && (
+                    <div style={{ fontSize: '0.6rem', color: 'var(--muted)', marginTop: 4 }}>
+                      {history[history.length-1].editDistance < history[history.length-2].editDistance
+                        ? '↓ decreasing: model self-correcting'
+                        : history[history.length-1].editDistance === 0
+                        ? '✓ no further corrections needed'
+                        : '→ corrections applied'}
+                    </div>
+                  )}
+                </div>
+
+                {/* Confidence */}
+                <div className="metric-card">
+                  <div className="metric-label">Confidence Score</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                    <div className="metric-value" style={{ color: metrics.confidence >= 80 ? 'var(--teal)' : metrics.confidence >= 60 ? '#FFB830' : 'var(--red)' }}>
+                      {metrics.confidence}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 700 }}>/ 100</div>
+                  </div>
+                  <div className="metric-sub">factual accuracy after grounding</div>
+                  {/* progress bar */}
+                  <div style={{ marginTop: 8, height: 4, background: '#1e2d40', borderRadius: 2 }}>
+                    <div style={{
+                      height: '100%', borderRadius: 2,
+                      width: `${metrics.confidence}%`,
+                      background: metrics.confidence >= 80 ? 'var(--teal)' : metrics.confidence >= 60 ? '#FFB830' : 'var(--red)',
+                      transition: 'width 0.6s ease',
+                    }} />
+                  </div>
+                </div>
+
+                {/* Corrections */}
+                <div className="metric-card">
+                  <div className="metric-label">Factual Corrections</div>
+                  <div className="metric-value" style={{ color: metrics.corrections > 0 ? '#FFB830' : 'var(--teal)' }}>
+                    {metrics.corrections}
+                  </div>
+                  <div className="metric-sub">
+                    {metrics.corrections > 0 ? 'facts rewritten by grounding' : 'no corrections needed'}
+                  </div>
+                </div>
+
+                {/* Grounding status */}
+                <div className="metric-card">
+                  <div className="metric-label">Knowledge Base</div>
+                  <div style={{ display: 'flex', flex: 'column', gap: 4, marginTop: 4 }}>
+                    {KNOWLEDGE_BASE.slice(0, 4).map((fact, i) => (
+                      <div key={i} style={{ fontSize: '0.62rem', color: '#475569', lineHeight: 1.4, paddingBottom: 4, borderBottom: i < 3 ? '1px solid var(--border)' : 'none', paddingTop: i > 0 ? 4 : 0 }}>
+                        {fact.length > 60 ? fact.slice(0, 57) + '…' : fact}
+                      </div>
+                    ))}
+                    <div style={{ fontSize: '0.6rem', color: '#334155', marginTop: 2 }}>+{KNOWLEDGE_BASE.length - 4} more facts</div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

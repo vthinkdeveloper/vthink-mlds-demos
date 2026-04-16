@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MLDS 2026: Agentic AI Demos</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0f1a;
+      --surface:   #111827;
+      --border:    #1e2d40;
+      --teal:      #2dd4bf;
+      --teal-dim:  #14b8a6;
+      --text:      #e2e8f0;
+      --muted:     #94a3b8;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 3rem 1.5rem 4rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3.5rem;
+    }
+
+    header .eyebrow {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--teal);
+      margin-bottom: 0.75rem;
+    }
+
+    header h1 {
+      font-size: clamp(1.75rem, 4vw, 2.75rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+
+    header h1 span {
+      color: var(--teal);
+    }
+
+    header .subtitle {
+      margin-top: 0.6rem;
+      font-size: 1rem;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.5rem;
+      width: 100%;
+      max-width: 860px;
+    }
+
+    @media (max-width: 560px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.75rem 1.75rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .card:hover {
+      border-color: var(--teal-dim);
+      transform: translateY(-2px);
+    }
+
+    .card-num {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--teal);
+    }
+
+    .card h2 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .card p {
+      font-size: 0.875rem;
+      color: var(--muted);
+      line-height: 1.6;
+      flex: 1;
+    }
+
+    .card a {
+      display: inline-block;
+      margin-top: 0.5rem;
+      padding: 0.55rem 1.1rem;
+      background: transparent;
+      border: 1px solid var(--teal);
+      color: var(--teal);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-decoration: none;
+      align-self: flex-start;
+      transition: background 0.18s, color 0.18s;
+    }
+
+    .card a:hover {
+      background: var(--teal);
+      color: var(--bg);
+    }
+
+    footer {
+      margin-top: 4rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>MLDS 2026: <span>Agentic AI</span> Demos</h1>
+  </header>
+
+  <main class="grid">
+
+    <div class="card">
+      <span class="card-num">Demo 01</span>
+      <h2>Memory Inspector</h2>
+      <p>Cognitive architectures &amp; memory hierarchy: visualise how agents store, retrieve, and reason across episodic, semantic, and working memory.</p>
+      <a href="demo1-memory-inspector/">Launch Demo &rarr;</a>
+    </div>
+
+    <div class="card">
+      <span class="card-num">Demo 02</span>
+      <h2>ABAC Guardian</h2>
+      <p>Security &amp; governance in multi-agent systems: enforce attribute-based access control policies across dynamic agent pipelines.</p>
+      <a href="demo2-abac/">Launch Demo &rarr;</a>
+    </div>
+
+    <div class="card">
+      <span class="card-num">Demo 03</span>
+      <h2>Branch Explorer</h2>
+      <p>Serverless branching for agent databases: explore copy-on-write branching strategies that let agents fork and merge state without downtime.</p>
+      <a href="demo3-serverless-branching/">Launch Demo &rarr;</a>
+    </div>
+
+
+  </main>
+
+</body>
+</html>
