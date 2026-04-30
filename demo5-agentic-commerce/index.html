@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo 05 — Agentic Commerce</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #0b0f1a;
+      --surface: #111827;
+      --surface2:#162032;
+      --border:  #1e2d40;
+      --teal:    #2dd4bf;
+      --teal-dim:#14b8a6;
+      --amber:   #f59e0b;
+      --green:   #22c55e;
+      --red:     #ef4444;
+      --blue:    #60a5fa;
+      --purple:  #a78bfa;
+      --text:    #e2e8f0;
+      --muted:   #94a3b8;
+      --dim:     #374151;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { display: inline-block; animation: spin 0.9s linear infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+    .pulse { animation: pulse 1.4s ease-in-out infinite; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 2px; }
+    textarea:focus { outline: none; border-color: var(--teal) !important; }
+
+    /* Markdown rendering inside reasoning panel */
+    .md-render { font-family: monospace; font-size: 0.83rem; line-height: 1.7; color: #c9d1d9; }
+    .md-render p   { margin-bottom: 0.5em; }
+    .md-render ul, .md-render ol { padding-left: 1.2em; margin-bottom: 0.5em; }
+    .md-render li  { margin-bottom: 2px; }
+    .md-render strong { color: #e2e8f0; }
+    .md-render h2, .md-render h3 { color: var(--teal); margin: 0.6em 0 0.3em; font-size: 0.9rem; }
+    .md-render table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 0.78rem; }
+    .md-render th   { background: #1a2a3a; color: var(--teal); text-align: left; padding: 6px 10px; border: 1px solid var(--border); }
+    .md-render td   { padding: 6px 10px; border: 1px solid var(--border); }
+    .md-render tr:nth-child(even) td { background: #0f1c2b; }
+    .md-render code { background: #1a2a3a; padding: 1px 5px; border-radius: 3px; font-size: 0.8rem; }
+    .md-render hr   { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-v="2">
+    const { useState, useRef, useEffect } = React;
+
+    const DEMO_INTENTS = [
+      { label: "Ladakh shoes",     text: "I'm going to Ladakh next month. Buy me appropriate trekking shoes under ₹5000." },
+      { label: "College laptop",   text: "My daughter starts college in June. Get her a good laptop under ₹50,000 for engineering coursework." },
+      { label: "Home espresso",    text: "I want to set up a home coffee bar. Recommend an espresso machine under ₹15,000." },
+    ];
+
+    // Regex to detect location context
+    const LOCATION_RE = /\b(ladakh|leh|kashmir|manali|himachal|uttarakhand|kedarnath|spiti|zanskar|rohtang|pangong|goa|kerala|rajasthan|sikkim|darjeeling|ooty|munnar)\b/i;
+
+    // ── SSE helper ────────────────────────────────────────────────────────────────
+    async function streamSSE(response, onChunk) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "", full = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (raw === "[DONE]") continue;
+          try {
+            const ev = JSON.parse(raw);
+            if (ev.type === "content_block_delta" && ev.delta?.text) {
+              full += ev.delta.text;
+              onChunk?.(full);
+            }
+          } catch(_) {}
+        }
+      }
+      return full;
+    }
+
+    // ── Step 1: Parse intent ──────────────────────────────────────────────────────
+    async function parseIntent(intentText, onChunk) {
+      const resp = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 600,
+          stream: true,
+          system: "You are a purchase intent parser. Return ONLY valid JSON — no markdown, no explanation.",
+          messages: [{
+            role: "user",
+            content: `Parse this purchase intent:\n"${intentText}"\n\nReturn JSON with keys:\n- category (string)\n- budget_inr (number)\n- context (string, 1 sentence)\n- requirements (string[], 3-5 items)\n- search_query (string, for Flipkart/Amazon India)\n- summary (string, 1 sentence)`,
+          }],
+        }),
+      });
+      const text = await streamSSE(resp, onChunk);
+      try {
+        return JSON.parse(text.replace(/```json\n?|```\n?/g, "").trim());
+      } catch(_) {
+        const m = text.match(/\{[\s\S]*\}/);
+        return m ? JSON.parse(m[0]) : null;
+      }
+    }
+
+    // ── Step 2: Context research — adapts to intent type ─────────────────────────
+    async function researchContext(intentText, parsed, onChunk) {
+      const locMatch = intentText.match(LOCATION_RE);
+      const location = locMatch?.[0] || null;
+
+      // Build a context-aware research prompt
+      const researchFocus = location
+        ? `The user is going to **${location}**. Research the environment/conditions there that affect what ${parsed.category} they should buy.`
+        : `The user's context is: "${parsed.context}". Research what matters most for buying ${parsed.category} in this use case.`;
+
+      const resp = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 500,
+          stream: true,
+          system: "You are a research assistant. Be extremely terse. Bullet points are bold key facts ONLY — no explanations, no sentences after the fact.",
+          messages: [{
+            role: "user",
+            content: `${researchFocus}\n\nStart with "Based on quick research${location ? `, I found ${location}` : ""} —" then list 4-5 bullets. Each bullet is ONLY a bold phrase (3-5 words): **Fact**. Nothing after it. No dashes, no explanations, no brand names.\n\nEnd with exactly:\n\`\`\`json\n{ "extra_requirements": ["req1", "req2", "req3"] }\n\`\`\``,
+          }],
+        }),
+      });
+      const full = await streamSSE(resp, onChunk);
+      let extraRequirements = [];
+      try {
+        const m = full.match(/```json\s*([\s\S]*?)```/);
+        if (m) {
+          const d = JSON.parse(m[1]);
+          extraRequirements = d.extra_requirements || [];
+        }
+      } catch(_) {}
+      return { text: full, extraRequirements };
+    }
+
+    // ── Step 3: Web search ────────────────────────────────────────────────────────
+    async function webSearch(query) {
+      try {
+        const resp = await fetch("/api/web-search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: query + " site:flipkart.com OR site:amazon.in" }),
+        });
+        const data = await resp.json();
+        return data.results || [];
+      } catch(_) { return []; }
+    }
+
+    // ── Step 4: Evaluate & rank ───────────────────────────────────────────────────
+    async function evaluateProducts(searchResults, parsed, terrainText, extraReqs, onChunk) {
+      const allReqs = [...(parsed.requirements || []), ...extraReqs];
+      const terrainSection = terrainText
+        ? `\n\n**Terrain / Context Research:**\n${terrainText.replace(/```json[\s\S]*?```/g, "").trim()}`
+        : "";
+      const searchSection = searchResults.length > 0
+        ? `\n\n**Products found via web search:**\n${searchResults.slice(0, 6).map(r => `- ${r.title}\n  ${r.snippet}\n  ${r.url}`).join("\n")}`
+        : `\n\n*No live search results — use your knowledge of products available on Flipkart and Amazon India for ${parsed.category} under ₹${parsed.budget_inr}.*`;
+
+      const prompt = `Purchase intent: ${parsed.summary}
+Budget: ₹${parsed.budget_inr}
+Requirements: ${allReqs.join(", ")}${terrainSection}${searchSection}
+
+Evaluate and rank the top 3 products. For each:
+- Name and score (X/10)
+- How it meets each requirement (✅ or ⚠️)
+- Pros and cons
+- Price estimate
+
+Include a comparison table at the end (markdown table format).
+
+Then output this exact JSON block (no other JSON):
+\`\`\`json
+{
+  "picks": [
+    {
+      "name": "Brand Model Name",
+      "price_inr": 3499,
+      "score": 9.2,
+      "image_query": "quechua forclaz 500 trekking shoes",
+      "why": "One sentence why it wins",
+      "pros": ["Waterproof membrane", "High ankle support"],
+      "cons": ["Heavier than alternatives"],
+      "flipkart_url": "https://www.flipkart.com/search?q=quechua+forclaz+500",
+      "amazon_url": "https://www.amazon.in/s?k=quechua+forclaz+500+trekking+shoes"
+    }
+  ],
+  "verdict": "One sentence final recommendation"
+}
+\`\`\``;
+
+      const resp = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 2200,
+          stream: true,
+          system: "You are a sharp, specific shopping agent. Use ₹ for prices. Be concise. Format with markdown — bullet points, bold headings, and a comparison table. Real brand names and models from Indian e-commerce.",
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+      return await streamSSE(resp, onChunk);
+    }
+
+    // ── Fetch product image via DuckDuckGo ────────────────────────────────────────
+    // Strip descriptions after " — " or " - " on bullet lines, keep only bold key fact
+    function trimContextBullets(text) {
+      return text.split("\n").map(line => {
+        // Only touch bullet lines
+        if (!line.trim().startsWith("•") && !line.trim().startsWith("-") && !line.trim().startsWith("*")) return line;
+        // Remove everything after the first long dash or " - " separator
+        return line.replace(/(\s+[—–-]+\s+.*$)/, "").trimEnd();
+      }).join("\n");
+    }
+
+    async function fetchProductImage(imageQuery) {
+      if (!imageQuery) return null;
+      try {
+        const resp = await fetch("/api/product-images", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: imageQuery }),
+        });
+        const data = await resp.json();
+        return data.image || null;
+      } catch(_) { return null; }
+    }
+
+    // ── Parse picks + clean reasoning text ───────────────────────────────────────
+    function extractPicks(text) {
+      const m = text.match(/```json\s*([\s\S]*?)```/);
+      if (!m) return null;
+      try { return JSON.parse(m[1]); } catch(_) { return null; }
+    }
+    function cleanReasoning(text) {
+      // Remove complete json blocks first, then any in-progress one still streaming
+      return text
+        .replace(/```json[\s\S]*?```/g, "")
+        .replace(/```json[\s\S]*/g, "")
+        .trim();
+    }
+
+    // ── UCP payload ───────────────────────────────────────────────────────────────
+    function buildUCP(parsed, pick) {
+      const sid = "ucp_" + Math.random().toString(36).slice(2, 10);
+      return {
+        protocol: "google.ucp.v1",
+        intent: "purchase",
+        buyer: { locale: "en-IN", currency: "INR" },
+        item: {
+          title: pick?.name || parsed.category,
+          category: parsed.category,
+          price: { amount: String(pick?.price_inr || parsed.budget_inr), currency: "INR" },
+          merchant: { name: "Flipkart", id: "flipkart.com", country: "IN" },
+        },
+        checkout: {
+          type: "express",
+          callbackUrl: "https://ucp.google.com/v1/checkout/callback",
+          sessionId: sid,
+          expiresAt: new Date(Date.now() + 30 * 60000).toISOString(),
+          paymentMethods: ["UPI", "card", "net_banking", "wallet"],
+        },
+        meta: { agentId: "mlds-demo-agent-v1", confidence: pick ? 0.94 : 0.78 },
+      };
+    }
+
+    // ── Sub-components ────────────────────────────────────────────────────────────
+    const STEP_DEFS = [
+      { id: "parse",    label: "Parse Intent",       color: "var(--teal)" },
+      { id: "terrain",  label: "Context Research",    color: "var(--purple)" },
+      { id: "search",   label: "Search Products",    color: "var(--blue)" },
+      { id: "evaluate", label: "Evaluate & Rank",    color: "var(--amber)" },
+    ];
+
+    function StepRow({ def, status, summary, expanded, onToggle }) {
+      const cfg = {
+        idle:    { icon: "○", color: "var(--dim)",   spin: false },
+        running: { icon: "⟳", color: def.color,      spin: true  },
+        done:    { icon: "✓", color: "var(--green)", spin: false },
+        error:   { icon: "✗", color: "var(--red)",   spin: false },
+      }[status] || { icon: "○", color: "var(--dim)", spin: false };
+
+      return (
+        <div style={{
+          background: "var(--surface)",
+          border: `1px solid ${status === "running" ? def.color : "var(--border)"}`,
+          borderRadius: 7, overflow: "hidden", transition: "border-color 0.2s",
+        }}>
+          <button onClick={onToggle} style={{
+            width: "100%", background: "none", border: "none",
+            padding: "9px 13px", display: "flex", alignItems: "center",
+            gap: 9, cursor: "pointer", color: "var(--text)",
+          }}>
+            <span className={cfg.spin ? "spin" : ""} style={{ color: cfg.color, fontSize: 13, lineHeight: 1, flexShrink: 0 }}>
+              {cfg.icon}
+            </span>
+            <span style={{ fontSize: "0.83rem", fontWeight: 600 }}>{def.label}</span>
+            {status === "running" && (
+              <span className="pulse" style={{ fontSize: "0.7rem", color: "var(--muted)" }}>processing…</span>
+            )}
+            <span style={{ marginLeft: "auto", fontSize: 9, color: "var(--dim)" }}>
+              {expanded ? "▲" : "▼"}
+            </span>
+          </button>
+          {expanded && summary && (
+            <div style={{
+              padding: "8px 13px 11px", borderTop: "1px solid var(--border)",
+              fontSize: "0.77rem", color: "var(--muted)", fontFamily: "monospace",
+              whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6, maxHeight: 160, overflowY: "auto",
+            }}>
+              {summary}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function ParsedParams({ p }) {
+      if (!p) return null;
+      return (
+        <div style={{ marginTop: 12, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 7, padding: 12 }}>
+          <div style={{ fontSize: "0.66rem", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 }}>
+            Extracted Intent
+          </div>
+          {[["Category", p.category], ["Budget", `₹${(p.budget_inr||0).toLocaleString("en-IN")}`], ["Context", p.context]].map(([k, v]) => (
+            <div key={k} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, fontSize: "0.78rem" }}>
+              <span style={{ color: "var(--muted)", flexShrink: 0 }}>{k}</span>
+              <span style={{ color: "var(--text)", fontWeight: 600, textAlign: "right", maxWidth: "65%", paddingLeft: 8 }}>{v}</span>
+            </div>
+          ))}
+          {p.requirements?.length > 0 && (
+            <div style={{ marginTop: 7, paddingTop: 7, borderTop: "1px solid var(--border)" }}>
+              {p.requirements.map((r, i) => (
+                <div key={i} style={{ fontSize: "0.76rem", color: "var(--text)", marginBottom: 2 }}>
+                  <span style={{ color: "var(--teal)" }}>→</span> {r}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function PickCard({ pick, rank, loading }) {
+      const [imgSrc, setImgSrc] = useState(pick.image || null);
+      const [imgFailed, setImgFailed] = useState(false);
+
+      return (
+        <div style={{
+          background: "var(--surface2)",
+          border: `1px solid ${rank === 1 ? "var(--teal)" : "var(--border)"}`,
+          borderRadius: 10, overflow: "hidden",
+        }}>
+          {/* Image row */}
+          <div style={{ display: "flex", gap: 0 }}>
+            <div style={{
+              width: 140, flexShrink: 0, background: "#0d1a2a",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              minHeight: 130, position: "relative", overflow: "hidden",
+            }}>
+              {loading ? (
+                <span className="spin" style={{ color: "var(--dim)", fontSize: 20 }}>⟳</span>
+              ) : imgSrc && !imgFailed ? (
+                <img
+                  src={imgSrc}
+                  alt={pick.name}
+                  onError={() => setImgFailed(true)}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                <div style={{
+                  width: "100%", height: "100%", minHeight: 130,
+                  background: `linear-gradient(135deg, #1a2a3a 0%, ${rank===1?"#0f3a35":"#1a2a40"} 100%)`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 36, color: rank===1 ? "var(--teal)" : "var(--dim)",
+                }}>
+                  {rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉"}
+                </div>
+              )}
+              {/* Rank badge */}
+              <div style={{
+                position: "absolute", top: 6, left: 6,
+                background: rank===1?"var(--teal)":"var(--dim)",
+                color: rank===1?"#0b0f1a":"var(--text)",
+                fontSize: "0.65rem", fontWeight: 700, padding: "2px 7px", borderRadius: 3,
+              }}>#{rank}</div>
+            </div>
+
+            {/* Info */}
+            <div style={{ flex: 1, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <span style={{ fontWeight: 700, fontSize: "0.88rem", lineHeight: 1.3 }}>{pick.name}</span>
+                <span style={{ color: "var(--teal)", fontWeight: 700, fontSize: "0.95rem", flexShrink: 0 }}>
+                  ₹{(pick.price_inr||0).toLocaleString("en-IN")}
+                </span>
+              </div>
+
+              {/* Score bar */}
+              {pick.score && (
+                <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <div style={{ flex: 1, height: 4, background: "var(--border)", borderRadius: 2 }}>
+                    <div style={{ width: `${(pick.score/10)*100}%`, height: "100%", background: "var(--teal)", borderRadius: 2 }} />
+                  </div>
+                  <span style={{ fontSize: "0.7rem", color: "var(--muted)", flexShrink: 0 }}>{pick.score}/10</span>
+                </div>
+              )}
+
+              {pick.why && (
+                <p style={{ fontSize: "0.78rem", color: "var(--muted)", lineHeight: 1.45 }}>{pick.why}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Pros / cons */}
+          {(pick.pros?.length > 0 || pick.cons?.length > 0) && (
+            <div style={{
+              display: "grid", gridTemplateColumns: "1fr 1fr",
+              borderTop: "1px solid var(--border)", fontSize: "0.76rem",
+            }}>
+              <div style={{ padding: "9px 12px", borderRight: "1px solid var(--border)" }}>
+                <div style={{ color: "var(--green)", fontWeight: 600, marginBottom: 4, fontSize: "0.68rem" }}>PROS</div>
+                {(pick.pros || []).map((p, i) => (
+                  <div key={i} style={{ color: "var(--text)", marginBottom: 2 }}>✓ {p}</div>
+                ))}
+              </div>
+              <div style={{ padding: "9px 12px" }}>
+                <div style={{ color: "var(--amber)", fontWeight: 600, marginBottom: 4, fontSize: "0.68rem" }}>CONS</div>
+                {(pick.cons || []).map((c, i) => (
+                  <div key={i} style={{ color: "var(--muted)", marginBottom: 2 }}>△ {c}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Links */}
+          <div style={{ display: "flex", gap: 8, padding: "9px 12px", borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
+            {pick.flipkart_url && (
+              <a href={pick.flipkart_url} target="_blank" rel="noopener noreferrer" style={{
+                fontSize: "0.74rem", padding: "5px 11px", background: "transparent",
+                border: "1px solid var(--teal)", color: "var(--teal)",
+                borderRadius: 4, textDecoration: "none", fontWeight: 600,
+              }}>View on Flipkart →</a>
+            )}
+            {pick.amazon_url && (
+              <a href={pick.amazon_url} target="_blank" rel="noopener noreferrer" style={{
+                fontSize: "0.74rem", padding: "5px 11px", background: "transparent",
+                border: "1px solid var(--amber)", color: "var(--amber)",
+                borderRadius: 4, textDecoration: "none", fontWeight: 600,
+              }}>View on Amazon →</a>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function UCPPanel({ payload }) {
+      const [open, setOpen] = useState(false);
+      if (!payload) return null;
+      return (
+        <div style={{ marginTop: 16 }}>
+          <button onClick={() => setOpen(o => !o)} style={{
+            width: "100%", background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: open ? "7px 7px 0 0" : 7,
+            padding: "10px 14px", display: "flex", alignItems: "center",
+            justifyContent: "space-between", cursor: "pointer", color: "var(--text)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: "0.875rem", fontWeight: 700 }}>UCP Checkout Payload</span>
+              <span style={{ background: "#1a3a5c", color: "var(--blue)", fontSize: "0.62rem", fontWeight: 700, padding: "2px 6px", borderRadius: 3, letterSpacing: "0.1em" }}>
+                google.ucp.v1
+              </span>
+            </div>
+            <span style={{ fontSize: 9, color: "var(--muted)" }}>{open ? "▲" : "▼"}</span>
+          </button>
+          {open && (
+            <div style={{
+              background: "#0d1117", border: "1px solid var(--border)", borderTop: "none",
+              borderRadius: "0 0 7px 7px", padding: "14px 16px",
+              fontFamily: "monospace", fontSize: "0.78rem", color: "#c9d1d9",
+              whiteSpace: "pre-wrap", lineHeight: 1.6,
+            }}>
+              {JSON.stringify(payload, null, 2)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── Main app ──────────────────────────────────────────────────────────────────
+    function App() {
+      const [intent, setIntent] = useState(DEMO_INTENTS[0].text);
+      const [running, setRunning] = useState(false);
+      const [error, setError]   = useState(null);
+
+      const initSteps = () => Object.fromEntries(STEP_DEFS.map(s => [s.id, { status: "idle", summary: "" }]));
+      const [steps, setSteps]   = useState(initSteps);
+      const [expanded, setExpanded] = useState(null);
+
+      const [parsed, setParsed]     = useState(null);
+      const [reasoning, setReasoning] = useState("");
+      const [picks, setPicks]       = useState(null);         // array with images
+      const [picksLoading, setPicksLoading] = useState(false);
+      const [verdict, setVerdict]   = useState("");
+      const [ucpPayload, setUcpPayload] = useState(null);
+
+      const reasonRef = useRef(null);
+
+      function updStep(id, status, summary) {
+        setSteps(prev => ({ ...prev, [id]: { status, summary: summary ?? prev[id].summary } }));
+        if (status === "running") setExpanded(id);
+      }
+      function appendStep(id, text) {
+        setSteps(prev => ({ ...prev, [id]: { ...prev[id], summary: text } }));
+      }
+
+      async function run() {
+        if (running || !intent.trim()) return;
+        setRunning(true); setError(null);
+        setSteps(initSteps()); setParsed(null);
+        setReasoning(""); setPicks(null); setVerdict(""); setUcpPayload(null);
+        setExpanded(null);
+
+        try {
+          // ── Step 1: Parse ──────────────────────────────────────────────
+          updStep("parse", "running", "");
+          const p = await parseIntent(intent, t => appendStep("parse", t));
+          if (!p) throw new Error("Intent parsing failed — check API key.");
+          setParsed(p);
+          updStep("parse", "done",
+            `Category: ${p.category}\nBudget: ₹${(p.budget_inr||0).toLocaleString("en-IN")}\nContext: ${p.context}`
+          );
+
+          // ── Step 2: Context research ───────────────────────────────────
+          updStep("terrain", "running", "");
+          let terrainText = "", extraReqs = [];
+          const terrainResult = await researchContext(intent, p, t => {
+            terrainText = t;
+            appendStep("terrain", t);
+            setReasoning(trimContextBullets(cleanReasoning(t)));
+          });
+          terrainText = terrainResult.text;
+          extraReqs   = terrainResult.extraRequirements;
+          updStep("terrain", "done",
+            `Found ${extraReqs.length} additional requirements from context research`
+          );
+
+          // ── Step 3: Search ─────────────────────────────────────────────
+          updStep("search", "running", "Querying DuckDuckGo…");
+          const searchResults = await webSearch(p.search_query);
+          updStep("search", "done",
+            searchResults.length > 0
+              ? `${searchResults.length} results:\n` + searchResults.slice(0,5).map(r => `• ${r.title}`).join("\n")
+              : `No live results — using Claude's product knowledge`
+          );
+
+          // ── Step 4: Evaluate ───────────────────────────────────────────
+          updStep("evaluate", "running", "");
+          const contextSection = trimContextBullets(cleanReasoning(terrainText));
+          const contextPrefix = contextSection ? `${contextSection}\n\n---\n\n` : "";
+          let evalFull = "";
+          const evalText = await evaluateProducts(searchResults, p, terrainText, extraReqs, t => {
+            evalFull = t;
+            setReasoning(contextPrefix + cleanReasoning(t));
+          });
+          setReasoning(contextPrefix + cleanReasoning(evalFull));
+
+          const picksData = extractPicks(evalFull);
+          if (picksData?.picks) {
+            setVerdict(picksData.verdict || "");
+            updStep("evaluate", "done", `Top pick: ${picksData.picks[0]?.name} (${picksData.picks[0]?.score}/10)`);
+
+            // Fetch product images in parallel via DuckDuckGo image search
+            setPicksLoading(true);
+            const rawPicks = picksData.picks.slice(0, 3);
+            setPicks(rawPicks.map(pk => ({ ...pk, image: null }))); // show cards immediately
+            const withImages = await Promise.all(
+              rawPicks.map(async pk => {
+                const image = await fetchProductImage(pk.image_query || pk.name);
+                return { ...pk, image };
+              })
+            );
+            setPicks(withImages);
+            setPicksLoading(false);
+          } else {
+            updStep("evaluate", "done", "See reasoning panel →");
+          }
+
+          // ── Step 5: UCP checkout ───────────────────────────────────────
+          updStep("checkout", "running", "Building payload…");
+          const ucp = buildUCP(p, picksData?.picks?.[0]);
+          setUcpPayload(ucp);
+          updStep("checkout", "done", `Session: ${ucp.checkout.sessionId}`);
+
+        } catch(e) {
+          setError(e.message);
+        } finally {
+          setRunning(false);
+        }
+      }
+
+      const renderedMd = reasoning
+        ? marked.parse(reasoning, { breaks: true, gfm: true })
+        : "";
+
+      return (
+        <div style={{ maxWidth: 1440, margin: "0 auto", padding: "2rem 2rem 4rem" }}>
+
+          {/* Header */}
+          <div style={{ marginBottom: "1.75rem" }}>
+            <a href="/" style={{ color: "var(--muted)", fontSize: "0.8rem", textDecoration: "none" }}>← Back</a>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10 }}>
+              <h1 style={{ fontSize: "1.5rem", fontWeight: 700 }}>Agentic Commerce</h1>
+              <span style={{ background: "#1a3a5c", color: "var(--blue)", fontSize: "0.65rem", fontWeight: 700, padding: "3px 8px", borderRadius: 4, letterSpacing: "0.1em" }}>
+                GOOGLE UCP
+              </span>
+            </div>
+            <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 5 }}>
+              Natural language → terrain research → product search → ranked recommendations → checkout
+            </p>
+          </div>
+
+          {/* Intent input */}
+          <div style={{ marginBottom: "1.5rem" }}>
+            <label style={{ display: "block", fontSize: "0.68rem", color: "var(--muted)", marginBottom: 6, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+              Purchase Intent
+            </label>
+            <div style={{ display: "flex", gap: 10 }}>
+              <textarea
+                value={intent}
+                onChange={e => setIntent(e.target.value)}
+                rows={2}
+                style={{
+                  flex: 1, background: "var(--surface)", border: "1px solid var(--border)",
+                  borderRadius: 8, padding: "10px 14px", color: "var(--text)",
+                  fontSize: "0.9rem", resize: "vertical", fontFamily: "inherit",
+                }}
+              />
+              <button
+                onClick={run} disabled={running || !intent.trim()}
+                style={{
+                  alignSelf: "flex-end", padding: "10px 20px",
+                  background: running ? "var(--dim)" : "var(--teal)",
+                  color: running ? "var(--muted)" : "#0b0f1a",
+                  border: "none", borderRadius: 8, fontWeight: 700,
+                  fontSize: "0.9rem", cursor: running ? "not-allowed" : "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {running ? "Running…" : "Find Products →"}
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              {DEMO_INTENTS.map((d, i) => (
+                <button key={i} onClick={() => setIntent(d.text)} style={{
+                  background: "transparent", border: "1px solid var(--border)",
+                  color: "var(--muted)", padding: "4px 10px",
+                  borderRadius: 4, fontSize: "0.73rem", cursor: "pointer",
+                }}>{d.label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Two-column layout */}
+          <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "2rem", alignItems: "start" }}>
+
+            {/* Left: pipeline + parsed params */}
+            <div>
+              <div style={{ fontSize: "0.66rem", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 9 }}>
+                Agent Pipeline
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                {STEP_DEFS.map(def => (
+                  <StepRow
+                    key={def.id}
+                    def={def}
+                    status={steps[def.id].status}
+                    summary={steps[def.id].summary}
+                    expanded={expanded === def.id}
+                    onToggle={() => setExpanded(prev => prev === def.id ? null : def.id)}
+                  />
+                ))}
+              </div>
+              <ParsedParams p={parsed} />
+            </div>
+
+            {/* Right: reasoning + products */}
+            <div>
+              <div style={{ fontSize: "0.66rem", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 9 }}>
+                Agent Reasoning
+              </div>
+              <div
+                ref={reasonRef}
+                style={{
+                  background: "#0d1117", border: "1px solid var(--border)",
+                  borderRadius: 8, padding: "14px 16px",
+                  minHeight: "calc(100vh - 320px)", overflowY: "auto",
+                }}
+              >
+                {reasoning ? (
+                  <div
+                    className="md-render"
+                    dangerouslySetInnerHTML={{ __html: renderedMd }}
+                  />
+                ) : (
+                  <span style={{ fontFamily: "monospace", fontSize: "0.83rem", color: "var(--dim)" }}>
+                    {running ? "Agent is thinking…" : "Agent reasoning will appear here."}
+                  </span>
+                )}
+              </div>
+
+              {verdict && (
+                <div style={{
+                  marginTop: 10, padding: "9px 14px",
+                  background: "#0f2a1e", border: "1px solid var(--green)",
+                  borderRadius: 7, fontSize: "0.84rem", color: "#86efac", fontWeight: 600,
+                }}>
+                  ✓ {verdict}
+                </div>
+              )}
+
+              {picks && picks.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: "0.66rem", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 9 }}>
+                    Top Recommendations
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {picks.map((pick, i) => (
+                      <PickCard key={i} pick={pick} rank={i + 1} loading={picksLoading && !pick.image} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+
+          {error && (
+            <div style={{
+              marginTop: 16, padding: 12, background: "#2a1515",
+              border: "1px solid var(--red)", borderRadius: 6,
+              color: "var(--red)", fontSize: "0.875rem",
+            }}>
+              {error}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
