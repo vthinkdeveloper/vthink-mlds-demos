@@ -1,6 +1,6 @@
 # MLDS 2026: Agentic AI — Live Demos
 
-Four self-contained, interactive demos for the internal tech talk at vThink Global Technologies. Each demo targets a specific engineering concern in agentic AI: memory, access control, database isolation, and output quality.
+Five self-contained, interactive demos for the internal tech talk at vThink Global Technologies. Each demo targets a specific engineering concern in agentic AI: memory, access control, database isolation, output quality, and agentic commerce.
 
 ---
 
@@ -45,6 +45,10 @@ Shows how an agent uses database branching to safely explore multiple migration 
 
 Shows how grounding an agent against a knowledge base reduces factual errors over iterations. In ungrounded mode, the agent generates a research brief in a single shot. In grounded mode, a second model cross-checks every claim against verified facts and returns corrections. The first model rewrites incorporating those corrections. A word-level diff highlights changes, and metrics track edit distance decreasing with each iteration.
 
+### Demo 05: Agentic Commerce
+
+Shows a full agentic purchase pipeline: natural language intent → context research (terrain/use-case analysis) → live DuckDuckGo product search → streaming Claude evaluation with markdown tables → ranked product picks with real images → Google UCP checkout payload. Demonstrates tool use, structured output extraction, and the difference between a reactive search and a proactive shopping advisor.
+
 ---
 
 ## Project structure
@@ -58,11 +62,13 @@ Shows how grounding an agent against a knowledge base reduces factual errors ove
 ├── demo2-abac/index.html
 ├── demo3-serverless-branching/index.html
 ├── demo4-grounded-rlaif/index.html
+├── demo5-agentic-commerce/index.html
 ├── knowledge/                          Background reading per topic
 │   ├── 01-agent-memory.md
 │   ├── 02-abac-in-agentic-systems.md
 │   ├── 03-database-branching-for-agents.md
-│   └── 04-grounded-rlaif.md
+│   ├── 04-grounded-rlaif.md
+│   └── 05-agentic-commerce.md
 └── .claude/commands/                   /start and /stop slash commands
 ```
 
